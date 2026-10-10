@@ -7,6 +7,15 @@ export interface SolicitudCotizacion {
   productoId: string;
   query: string;
   cantidad: number;
+  // Si viene, se cotiza esa variante exacta (sin búsqueda); query lleva el nombre del producto.
+  varianteId?: string;
+}
+
+export interface ProductoBuscado {
+  varianteId: string;
+  nombre: string;
+  precio: number; // unitario, en `moneda`
+  moneda: string;
 }
 
 export interface Cotizacion {
@@ -46,6 +55,7 @@ export class ReapError extends Error {
 export interface ReapClient {
   modoSimulado: boolean;
   modoPago: 'aprobacion' | 'simulado';
+  buscar(comercio: string, consulta: string): Promise<ProductoBuscado[]>;
   cotizar(s: SolicitudCotizacion): Promise<Cotizacion>;
   crearCheckout(q: Cotizacion): Promise<Checkout>;
   obtenerCheckout(id: string): Promise<Checkout>;
@@ -63,8 +73,14 @@ export class ReapSimulado implements ReapClient {
     this.ahora = ahora;
     this.vigenciaMs = vigenciaMs;
   }
+  async buscar(comercio: string, consulta: string): Promise<ProductoBuscado[]> {
+    const delComercio = CATALOGO.filter((x) => x.comercio === comercio && reglaComercio(comercio, 'MX', x.nombre).ok);
+    const palabras = consulta.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    const coinciden = delComercio.filter((x) => palabras.some((w) => `${x.nombre} ${x.query} ${x.id}`.toLowerCase().includes(w)));
+    return (coinciden.length > 0 ? coinciden : delComercio).slice(0, 8).map((x) => ({ varianteId: x.id, nombre: x.nombre, precio: x.precio, moneda: x.moneda }));
+  }
   async cotizar(s: SolicitudCotizacion): Promise<Cotizacion> {
-    const p = CATALOGO.find((x) => x.id === s.productoId && x.comercio === s.comercio);
+    const p = CATALOGO.find((x) => x.id === (s.varianteId ?? s.productoId) && x.comercio === s.comercio);
     if (!p) throw new ReapError('QUOTE_UNFULFILLABLE', `Producto ${s.productoId} no disponible en ${s.comercio} (simulado)`, 400);
     this.n += 1;
     const envio = ENVIO[p.comercio] ?? 0;
@@ -238,18 +254,36 @@ export class ReapReal implements ReapClient {
     }
     return json;
   }
-  // Una búsqueda + una cotización por llamada (rate limit 150/min).
-  async cotizar(s: SolicitudCotizacion): Promise<Cotizacion> {
-    const nombre = COMERCIOS[s.comercio]?.nombre;
-    if (!nombre) throw new ReapError('MERCHANT_NOT_RESOLVED', `Comercio ${s.comercio} sin nombre verificado para búsqueda`, 400);
+  async buscar(comercio: string, consulta: string): Promise<ProductoBuscado[]> {
+    const nombre = COMERCIOS[comercio]?.nombre;
+    if (!nombre) throw new ReapError('MERCHANT_NOT_RESOLVED', `Comercio ${comercio} sin nombre verificado para búsqueda`, 400);
     const busqueda = await this.llamar('POST', '/agentic/products/search', {
-      query: s.query,
+      query: consulta,
       merchantPreference: { mode: 'ONLY', merchantName: nombre },
       context: { country: 'MX', currency: 'MXN' },
       pagination: { limit: 10 },
     }, {}, true);
-    const lista = candidatos(busqueda?.products ?? [], s.comercio).slice(0, 3);
-    if (lista.length === 0) throw new ReapError('QUOTE_UNFULFILLABLE', `Sin productos disponibles y permitidos para "${s.query}" en ${nombre}`, 400);
+    return candidatos(busqueda?.products ?? [], comercio).slice(0, 8).map((c) => ({
+      varianteId: c.variantId, nombre: String(c.producto.name ?? consulta), precio: c.precio.amount, moneda: c.precio.currency,
+    }));
+  }
+  // Una búsqueda + una cotización por llamada (rate limit 150/min). Con varianteId se cotiza directo, sin búsqueda.
+  async cotizar(s: SolicitudCotizacion): Promise<Cotizacion> {
+    let lista: Candidato[];
+    if (s.varianteId) {
+      lista = [{ producto: { id: s.varianteId, name: s.query }, variantId: s.varianteId, precio: { amount: 0, currency: 'MXN' } }];
+    } else {
+      const nombre = COMERCIOS[s.comercio]?.nombre;
+      if (!nombre) throw new ReapError('MERCHANT_NOT_RESOLVED', `Comercio ${s.comercio} sin nombre verificado para búsqueda`, 400);
+      const busqueda = await this.llamar('POST', '/agentic/products/search', {
+        query: s.query,
+        merchantPreference: { mode: 'ONLY', merchantName: nombre },
+        context: { country: 'MX', currency: 'MXN' },
+        pagination: { limit: 10 },
+      }, {}, true);
+      lista = candidatos(busqueda?.products ?? [], s.comercio).slice(0, 3);
+      if (lista.length === 0) throw new ReapError('QUOTE_UNFULFILLABLE', `Sin productos disponibles y permitidos para "${s.query}" en ${nombre}`, 400);
+    }
     let q: any = null;
     let cand = lista[0];
     let ultimo: unknown = null;

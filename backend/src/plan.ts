@@ -7,6 +7,8 @@ export interface ItemPlan {
   query: string;
   cantidad: number;
   descripcion: string;
+  // Solo planes armados por el agente LLM: variante exacta a recotizar.
+  varianteId?: string;
 }
 
 export interface PartidaPlan {
