@@ -52,6 +52,8 @@ export interface Evento {
   margen: Margen;
   notas?: string;
   techoMXN: number;
+  agente: 'llm' | 'determinista';
+  modeloAgente: string | null;
   estado: EstadoEvento;
   modoSimulado: boolean;
   modoPago: ModoPago;

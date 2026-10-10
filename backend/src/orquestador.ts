@@ -68,7 +68,7 @@ function crearCotizador(deps: Deps, log: (a: Actor, m: string) => void, verbo: s
     let cantidad = item.cantidad;
     for (let intento = 0; ; intento++) {
       try {
-        const cot = await deps.reap.cotizar({ comercio: item.comercio, productoId: item.productoId, query: item.query, cantidad });
+        const cot = await deps.reap.cotizar({ comercio: item.comercio, productoId: item.productoId, query: item.query, cantidad, ...(item.varianteId ? { varianteId: item.varianteId } : {}) });
         const { montoMXN, tipoCambio } = aMXN(cot.finalAmount, cot.moneda, deps.fx);
         const ajustada = cantidad < item.cantidad;
         if (ajustada) log('agente', `Solo hay existencias para ${cantidad} de ${item.cantidad} en ${item.comercio}; ajustó la cantidad`);

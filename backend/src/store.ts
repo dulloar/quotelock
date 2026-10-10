@@ -1,5 +1,23 @@
 import type { Evento } from './tipos.ts';
-import type { PartidaPlan } from './plan.ts';
+import type { PartidaPlan, ItemPlan } from './plan.ts';
+import type { Cotizacion } from './reap.ts';
+
+export interface ItemLlm {
+  item: ItemPlan;
+  cot: Cotizacion;
+  mxn: number;
+  tc: number;
+  presupuestadoMXN: number;
+}
+
+// Estado del agente LLM / herramientas MCP por evento (no se serializa).
+export interface EstadoAgente {
+  llamadas: number;
+  cargosCreados: boolean;
+  cerrado: boolean;
+  items: Record<string, ItemLlm>; // por nombre de partida
+  variantes: Record<string, { comercio: string; nombre: string; precio: number; moneda: string }>; // 'comercio|varianteId'
+}
 
 // Estado interno que NO se serializa al front.
 export interface Interno {
@@ -13,6 +31,7 @@ export interface Interno {
   // partidas (por índice) sin cotización posible -> motivo; no bloquean el cierre del evento
   sinCotizacion: Record<number, string>;
   plan?: PartidaPlan[];
+  llm?: EstadoAgente;
 }
 
 export class Store {
