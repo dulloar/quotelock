@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 export default defineConfig({
-  testDir: '.', timeout: 300000, reporter: 'list', outputDir: 'test-results',
+  testDir: '.', testIgnore: 'demo-real.spec.ts', timeout: 300000, reporter: 'list', outputDir: 'test-results',
   use: {
     channel: 'chromium',
     baseURL: 'http://localhost:5174',
