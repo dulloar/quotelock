@@ -1,0 +1,51 @@
+/* Hallmark · propuesta F «El agente te cuenta» · esquema: complementario dividido · matiz base: 265°
+ * Regla de color: índigo = marca y reglas · verde = cabe · ámbar = margen · rojo = solo el techo y el alto.
+ * Proporción 60-30-10: neutros fríos · tinta e índigo · color de estado. El color nunca va solo: lleva forma y palabra.
+ * Todo color y toda familia tipográfica de la web sale de aquí; no se escriben valores sueltos en otros archivos.
+ */
+:root {
+  /* neutros fríos (60%) */
+  --fondo: oklch(0.972 0.008 265);
+  --superficie: oklch(0.995 0.003 265);
+  --superficie-2: oklch(0.938 0.014 265);
+  --linea: oklch(0.875 0.018 265);
+  /* tinta y marca (30%) */
+  --tinta: oklch(0.24 0.05 265);
+  --tinta-2: oklch(0.45 0.04 265);
+  --marca: oklch(0.42 0.17 268);
+  --marca-suave: oklch(0.945 0.03 268);
+  --sobre-marca: oklch(0.99 0.008 268);
+  /* semánticos (10%) */
+  --cabe: oklch(0.5 0.125 152);
+  --cabe-suave: oklch(0.95 0.045 152);
+  --margen: oklch(0.8 0.15 82);
+  --margen-tinta: oklch(0.44 0.095 68);
+  --margen-suave: oklch(0.955 0.055 88);
+  --alto: oklch(0.5 0.19 27);
+  --alto-suave: oklch(0.955 0.03 27);
+  --sobre-alto: oklch(0.99 0.008 27);
+  --foco: oklch(0.55 0.2 268);
+
+  --f-titular: 'Bricolage Grotesque', 'Hanken Grotesk', system-ui, sans-serif;
+  --f-texto: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* escala de 4 pt */
+  --esp-1: 0.25rem;
+  --esp-2: 0.5rem;
+  --esp-3: 0.75rem;
+  --esp-4: 1rem;
+  --esp-5: 1.5rem;
+  --esp-6: 2rem;
+  --esp-7: 3rem;
+
+  --texto-xs: 0.8125rem;
+  --texto-sm: 0.9375rem;
+  --texto-md: 1rem;
+  --texto-lg: 1.25rem;
+  --texto-xl: 1.75rem;
+  --texto-2xl: 2.5rem;
+
+  --radio: 14px;
+  --radio-chico: 8px;
+  --ancho-pagina: 1080px;
+}
