@@ -19,7 +19,7 @@ fi
 if [ -f "$raiz/.env" ]; then
   while IFS='=' read -r nombre valor; do
     case "$nombre" in
-      *KEY*|*TOKEN*|*SECRET*)
+      *KEY*|*TOKEN*|*SECRET*|*API*|*api*)
         if [ ${#valor} -ge 12 ] && printf '%s\n' "$agregado" | grep -F -- "$valor" >/dev/null; then
           echo "BLOQUEADO: el commit contiene el valor de $nombre de tu .env."
           exit 1
