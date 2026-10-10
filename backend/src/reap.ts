@@ -27,6 +27,7 @@ export interface Checkout {
   orderId: string | null;
   finalAmount: number | null;
   moneda: string;
+  nextAction?: { url: string; expiresAt: string | null } | null;
 }
 
 export class ReapError extends Error {
@@ -44,6 +45,7 @@ export class ReapError extends Error {
 
 export interface ReapClient {
   modoSimulado: boolean;
+  modoPago: 'aprobacion' | 'simulado';
   cotizar(s: SolicitudCotizacion): Promise<Cotizacion>;
   crearCheckout(q: Cotizacion): Promise<Checkout>;
   obtenerCheckout(id: string): Promise<Checkout>;
@@ -52,6 +54,7 @@ export interface ReapClient {
 // ---------------------------------------------------------------- Simulado
 export class ReapSimulado implements ReapClient {
   modoSimulado = true;
+  modoPago: 'aprobacion' | 'simulado' = 'simulado';
   ahora: () => Date;
   vigenciaMs: number;
   n = 0;
@@ -92,8 +95,6 @@ export class ReapSimulado implements ReapClient {
 
 // -------------------------------------------------------------------- Real
 // Probado contra el sandbox real (búsqueda y cotización); formas de respuesta en test/reap.test.ts.
-const FINALES = ['COMPLETED', 'FAILED', 'EXPIRED'];
-
 export interface ConfigReal {
   baseUrl: string;
   apiKey: string;
@@ -101,6 +102,7 @@ export interface ConfigReal {
   returnUrl: string;
   enrollmentId: string;
   email: string;
+  modoPago?: 'aprobacion' | 'simulado';
   pollMs?: number;
   pollMaxMs?: number;
 }
@@ -185,14 +187,17 @@ export function parsearCotizacion(q: any, s: SolicitudCotizacion, cand: Candidat
 export function mapearCheckoutReap(c: any, monedaPorDefecto = 'MXN'): Checkout {
   // POST devuelve `amount`; GET devuelve `finalAmount`.
   const m = parsearMonto(c?.finalAmount ?? c?.amount, monedaPorDefecto);
-  return { id: c.id, status: c.status, orderId: c.orderId ?? null, finalAmount: m ? m.amount : null, moneda: m?.currency ?? monedaPorDefecto };
+  const na = c?.nextAction?.url ? { url: String(c.nextAction.url), expiresAt: c.nextAction.expiresAt ?? null } : null;
+  return { id: c.id, status: c.status, orderId: c.orderId ?? null, finalAmount: m ? m.amount : null, moneda: m?.currency ?? monedaPorDefecto, nextAction: na };
 }
 
 export class ReapReal implements ReapClient {
   modoSimulado = false;
+  modoPago: 'aprobacion' | 'simulado';
   cfg: ConfigReal;
   constructor(cfg: ConfigReal) {
     this.cfg = cfg;
+    this.modoPago = cfg.modoPago ?? 'aprobacion';
   }
   async llamar(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown, extra: Record<string, string> = {}): Promise<any> {
     const headers: Record<string, string> = {
@@ -257,22 +262,17 @@ export class ReapReal implements ReapClient {
     return parsearCotizacion(q, s, cand);
   }
   async crearCheckout(q: Cotizacion): Promise<Checkout> {
+    // Plan B: el pago se simula localmente, sin llamar a Reap.
+    if (this.modoPago === 'simulado')
+      return { id: `chk_sim_${crypto.randomUUID()}`, status: 'COMPLETED', orderId: `sim_${crypto.randomUUID()}`, finalAmount: q.finalAmount, moneda: q.moneda, nextAction: null };
+    // Sin X-Simulate-Checkout: queda en REQUIRES_ACTION con nextAction.url; una persona aprueba en Reap.
     const c = await this.llamar(
       'POST',
       '/agentic/checkouts',
       { quoteId: q.id, enrollmentId: this.cfg.enrollmentId, presentation: { type: 'REDIRECT', returnUrl: this.cfg.returnUrl } },
-      { 'Idempotency-Key': crypto.randomUUID(), 'X-Simulate-Checkout': 'COMPLETED' },
+      { 'Idempotency-Key': crypto.randomUUID() },
     );
-    let actual = mapearCheckoutReap(c, q.moneda);
-    const inicio = Date.now();
-    const pollMs = this.cfg.pollMs ?? 2000;
-    const max = this.cfg.pollMaxMs ?? 40_000;
-    // Aun con el header de simulación la respuesta inicial es REQUIRES_ACTION: sondear hasta estado final.
-    while (!FINALES.includes(actual.status) && Date.now() - inicio < max) {
-      await new Promise((r) => setTimeout(r, pollMs));
-      actual = await this.obtenerCheckout(actual.id, q.moneda);
-    }
-    return actual;
+    return mapearCheckoutReap(c, q.moneda);
   }
   async obtenerCheckout(id: string, moneda = 'MXN'): Promise<Checkout> {
     return mapearCheckoutReap(await this.llamar('GET', `/agentic/checkouts/${id}`), moneda);
@@ -288,5 +288,6 @@ export function crearReap(env: Record<string, string | undefined>): ReapClient {
     returnUrl: env.REAP_RETURN_URL || 'https://example.com/return',
     enrollmentId: env.REAP_ENROLLMENT_ID || '',
     email: env.REAP_EMAIL || 'evento@example.com',
+    modoPago: env.MODO_PAGO === 'simulado' ? 'simulado' : 'aprobacion',
   });
 }

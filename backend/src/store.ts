@@ -5,6 +5,9 @@ export interface Interno {
   ejecutando: boolean;
   // estados de checkout por indice de partida (para regla de cobro doble)
   checkouts: Record<number, string[]>;
+  hayReplan: boolean;
+  ultimaRonda: number;
+  refrescando: boolean;
 }
 
 export class Store {
@@ -18,7 +21,7 @@ export class Store {
   }
   guardar(e: Evento): void {
     this.eventos.set(e.id, e);
-    if (!this.internos.has(e.id)) this.internos.set(e.id, { ejecutando: false, checkouts: {} });
+    if (!this.internos.has(e.id)) this.internos.set(e.id, { ejecutando: false, checkouts: {}, hayReplan: false, ultimaRonda: 0, refrescando: false });
   }
   obtener(id: string): Evento | undefined {
     return this.eventos.get(id);
