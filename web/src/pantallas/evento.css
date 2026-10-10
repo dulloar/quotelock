@@ -815,3 +815,25 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---------- aprobación en Reap ---------- */
+.ev-aprobacion {
+  display: grid;
+  gap: var(--esp-3);
+  justify-items: start;
+  margin-top: var(--esp-2);
+}
+.ev-aprobacion .ev-aviso {
+  width: 100%;
+  border: 2px solid var(--margen);
+  background: var(--margen-suave);
+  color: var(--tinta);
+}
+.ev-aprobar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-2) var(--esp-3);
+  margin: var(--esp-3) 0 var(--esp-3);
+  color: var(--tinta-2);
+}

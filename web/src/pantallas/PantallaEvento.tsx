@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { mensajeDeError, obtenerEvento } from '../datos/fuente';
+import { mensajeDeError, obtenerEvento, reintentarEvento } from '../datos/fuente';
 import type { Lectura } from '../datos/fuente';
 import { BarraTecho } from '../evento/BarraTecho';
 import {
   cifrasDeApoyo,
+  cuantas,
   cuentas,
   encabezado,
   grupos,
@@ -17,7 +18,7 @@ import { Icono } from '../evento/Icono';
 import type { TipoIcono } from '../evento/Icono';
 import { leerTimeline } from '../evento/leerTimeline';
 import type { LecturaTimeline, LoQueCambio } from '../evento/leerTimeline';
-import { ETIQUETA_ESTADO_EVENTO, fechaLarga, horaCorta, mensajeLegible, mxn, porcentaje } from '../formato';
+import { ETIQUETA_ESTADO_EVENTO, fechaLarga, horaCorta, horaLimite, mensajeLegible, mxn, porcentaje } from '../formato';
 import type { Actor, EstadoPartida, Evento, Partida } from '../tipos';
 import { AvisoSinConexion } from './AvisoSinConexion';
 import './evento.css';
@@ -34,6 +35,8 @@ const ICONO_GRUPO: Record<EstadoPartida, TipoIcono> = {
   bloqueado: 'alto',
   no_lograda: 'noLograda',
   pendiente: 'pendiente',
+  por_aprobar: 'margen',
+  aprobado: 'cabe',
 };
 
 /** Resalta los montos ($1,218.90) dentro de una frase, sin tocar el texto. */
@@ -182,6 +185,14 @@ function FilaPartida({ p, c, cambio }: { p: Partida; c: Cuentas; cambio: LoQueCa
           </p>
         )
       )}
+      {p.estado === 'por_aprobar' && p.urlAprobacion && (
+        <p className="ev-aprobar">
+          <a className="boton boton--principal" href={p.urlAprobacion} target="_blank" rel="noopener noreferrer">
+            Aprobar en Reap
+          </a>
+          {p.aprobacionExpira && <span>Vence a las {horaLimite(p.aprobacionExpira)}</span>}
+        </p>
+      )}
       <details className="ev-plegado">
         <summary>Ver detalle</summary>
         <dl className="ev-detalle">
@@ -208,7 +219,7 @@ function FilaPartida({ p, c, cambio }: { p: Partida; c: Cuentas; cambio: LoQueCa
 function Partidas({ evento, c, lectura }: { evento: Evento; c: Cuentas; lectura: LecturaTimeline }) {
   const lista: Grupo[] = grupos(evento);
   const n = evento.partidas.length;
-  const titulo = c.vista === 'alto' ? 'Esto intenté pagar' : c.vista === 'borrador' ? 'Las partidas' : 'Esto pagué';
+  const titulo = c.vista === 'alto' ? 'Esto intenté pagar' : c.vista === 'borrador' ? 'Las partidas' : c.porAprobarEvento ? 'Esto voy a pagar' : 'Esto pagué';
   const bajada =
     n === 0
       ? 'Todavía no armo las partidas de este evento.'
@@ -325,13 +336,68 @@ function DatosEvento({ evento, c }: { evento: Evento; c: Cuentas }) {
   );
 }
 
-function Informe({ evento }: { evento: Evento }) {
+function AvisoAprobacion({
+  evento,
+  c,
+  onReintentar,
+  reintentando,
+  errorReintento,
+}: {
+  evento: Evento;
+  c: Cuentas;
+  onReintentar: () => void;
+  reintentando: boolean;
+  errorReintento: string | null;
+}) {
+  const puedeReintentar =
+    evento.estado === 'revision_humana' &&
+    evento.modoPago === 'aprobacion' &&
+    evento.partidas.some((p) => p.estado === 'no_lograda' || p.estado === 'bloqueado');
+  if (!c.porAprobarEvento && !puedeReintentar && !errorReintento) return null;
+  return (
+    <div className="ev-aprobacion">
+      {c.porAprobarEvento && (
+        <p className="ev-aviso" role="status">
+          <Icono tipo="margen" />
+          <span>
+            {cuantas(c.porAprobar, 'cargo espera', 'cargos esperan')} tu aprobación en Reap. Apruébalos pronto: las
+            cotizaciones vencen en unos 5 minutos.
+          </span>
+        </p>
+      )}
+      {puedeReintentar && (
+        <button type="button" className="boton boton--principal" onClick={onReintentar} disabled={reintentando} aria-busy={reintentando}>
+          {reintentando ? 'Recotizando…' : 'Recotizar y reintentar'}
+        </button>
+      )}
+      {errorReintento && (
+        <p className="ev-aviso ev-aviso--error" role="alert">
+          <Icono tipo="alto" />
+          <span>{errorReintento}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Informe({
+  evento,
+  onReintentar,
+  reintentando,
+  errorReintento,
+}: {
+  evento: Evento;
+  onReintentar: () => void;
+  reintentando: boolean;
+  errorReintento: string | null;
+}) {
   const c = useMemo(() => cuentas(evento), [evento]);
   const lectura = useMemo(() => leerTimeline(evento.timeline, evento.partidas), [evento]);
 
   return (
     <div className="ev-columnas">
       <div className="ev-principal">
+        <AvisoAprobacion evento={evento} c={c} onReintentar={onReintentar} reintentando={reintentando} errorReintento={errorReintento} />
         <Encabezado evento={evento} c={c} />
         <Medida evento={evento} c={c} />
         {c.vista === 'alto' && <Pido evento={evento} c={c} />}
@@ -371,6 +437,36 @@ export function PantallaEvento({ id }: { id: string }) {
       vigente = false;
     };
   }, [id]);
+
+  const [reintentando, setReintentando] = useState(false);
+  const [errorReintento, setErrorReintento] = useState<string | null>(null);
+
+  // Sondeo: mientras el evento espera aprobación se vuelve a pedir cada 3 s, sin pasar por «Cargando».
+  const porAprobar = lectura?.origen === 'api' && lectura.datos?.estado === 'por_aprobar';
+  useEffect(() => {
+    if (!porAprobar) return;
+    let vigente = true;
+    const t = setInterval(() => {
+      obtenerEvento(id)
+        .then((l) => vigente && l.origen === 'api' && l.datos && setLectura(l))
+        .catch(() => {
+          // Un fallo suelto del sondeo no tira la pantalla: el siguiente intento lo corrige.
+        });
+    }, 3000);
+    return () => {
+      vigente = false;
+      clearInterval(t);
+    };
+  }, [id, porAprobar]);
+
+  function reintentar() {
+    setReintentando(true);
+    setErrorReintento(null);
+    reintentarEvento(id)
+      .then((e) => setLectura({ datos: e, origen: 'api' }))
+      .catch((e) => setErrorReintento(mensajeDeError(e)))
+      .finally(() => setReintentando(false));
+  }
 
   if (error) {
     return (
@@ -416,7 +512,7 @@ export function PantallaEvento({ id }: { id: string }) {
     <article className="ev-raiz">
       <Regreso />
       {sinConexion && <AvisoSinConexion />}
-      <Informe evento={evento} />
+      <Informe evento={evento} onReintentar={reintentar} reintentando={reintentando} errorReintento={errorReintento} />
     </article>
   );
 }

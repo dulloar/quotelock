@@ -271,6 +271,12 @@ svg.ic {
   color: var(--margen-tinta);
 }
 
+.estado[data-estado='por_aprobar'] {
+  background: var(--margen-suave);
+  color: var(--margen-tinta);
+}
+
+.estado[data-estado='por_aprobar'] svg.ic,
 .estado[data-estado='ajustado'] svg.ic {
   color: var(--margen);
 }

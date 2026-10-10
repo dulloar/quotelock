@@ -115,3 +115,8 @@ export function crearEvento(brief: Brief): Promise<Evento> {
 export function ejecutarEvento(id: string): Promise<Evento> {
   return pedir<Evento>('POST', `/api/eventos/${encodeURIComponent(id)}/ejecutar`, ESPERA_EJECUTAR_MS, 'no se puede ejecutar el evento');
 }
+
+/** Recotiza las partidas no logradas o bloqueadas y crea cargos nuevos por aprobar. Lanza ErrorApi (400/409) o ErrorSinConexion. */
+export function reintentarEvento(id: string): Promise<Evento> {
+  return pedir<Evento>('POST', `/api/eventos/${encodeURIComponent(id)}/reintentar`, ESPERA_EJECUTAR_MS, 'no se puede reintentar el evento');
+}
