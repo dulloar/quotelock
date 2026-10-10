@@ -88,6 +88,20 @@ Base: `http://localhost:3001`
 - `actor` de la línea de tiempo: `agente`, `reglas`, `humano`.
 - `margen`: `0.1`, `0.2` o `0.3`.
 
+### Cambio del 9 oct, 8:50 pm: pago con aprobación en Reap
+
+En el sandbox cada cargo necesita que una persona lo apruebe en la página de Reap. El contrato gana estos campos y estados:
+
+- Evento: nuevo `estado` **`por_aprobar`** y campo `modoPago` (`aprobacion` o `simulado`).
+- Partida: nuevos estados **`por_aprobar`** y **`aprobado`**, y campos `urlAprobacion`, `aprobacionExpira` y `checkoutId`.
+
+**Qué hace el front:**
+1. Tras `POST /ejecutar`, si el evento está `por_aprobar`, mostrar en cada partida `por_aprobar` un botón **"Aprobar en Reap"** que abre `urlAprobacion` en otra pestaña.
+2. Consultar `GET /api/eventos/:id` cada 3 segundos mientras el evento esté `por_aprobar`; el backend actualiza solo el estado de cada cargo.
+3. `aprobado` significa "aprobado por la persona, orden en proceso"; mostrarlo como cobrado.
+
+Plan B: con `MODO_PAGO=simulado` el backend paga en modo simulado y no hay botón; el evento trae `modoSimulado: true`.
+
 ---
 
 ## 4. Tareas de David (backend, carpeta `backend/`)

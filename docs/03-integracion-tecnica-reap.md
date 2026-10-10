@@ -71,12 +71,7 @@ POST /agentic/enrollments            → status REQUIRES_ACTION + nextAction.url
 GET  /agentic/enrollments/:id        → confirmar status ACTIVE
 ```
 
-**Tarjetas de prueba (solo sandbox, solo Agentic API):**
-| Número | CVC | Vence |
-|---|---|---|
-| 4622 9431 2313 7797 | 640 | 12/27 |
-| 4622 9431 2313 7805 | 304 | 12/27 |
-| 4622 9431 2313 7847 | 698 | 12/27 |
+**Tarjeta:** se usa la tarjeta de prueba que Reap entrega con las credenciales del equipo. La captura una persona en la página de Reap; nunca se escribe en el repo, en prompts ni en el código.
 
 OTP de verificación: **`456789`** (sirve por email y por SMS).
 

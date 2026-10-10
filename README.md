@@ -100,6 +100,12 @@ cp .env.example .env   # y llenar REAP_API_KEY
 
 `.env` está en `.gitignore`. La key nunca va en el repo, en prompts, en logs ni en el video.
 
+Activa una vez por clon el bloqueo que impide hacer commit de llaves o de archivos `.env`:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Documentos
 
 - [`docs/01-idea-y-plan.md`](docs/01-idea-y-plan.md): problema, idea, flujo y pasos.
