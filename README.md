@@ -106,6 +106,7 @@ cp .env.example .env   # y llenar REAP_API_KEY
 - [`docs/02-reglas-integracion-roles.md`](docs/02-reglas-integracion-roles.md): checklist oficial, arquitectura y reparto.
 - [`docs/03-integracion-tecnica-reap.md`](docs/03-integracion-tecnica-reap.md): endpoints, estados, errores y pruebas.
 - [`docs/04-alineacion-reglas-quotelock.md`](docs/04-alineacion-reglas-quotelock.md): reglas del hackathon y prompt de auditoría.
+- [`docs/05-tareas-mvp.md`](docs/05-tareas-mvp.md): **estrategia, contrato y tareas del MVP por persona.**
 
 ## Siguiente paso
 
