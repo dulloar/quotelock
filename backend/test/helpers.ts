@@ -15,7 +15,7 @@ export class ReapEspia extends ReapSimulado {
 export function nuevoEvento(store: Store, presupuestoMXN: number, margen: Margen, notas?: string): Evento {
   const e: Evento = {
     id: store.siguienteId(), nombre: 'Workshop', fecha: '2026-10-24', asistentes: 40, presupuestoMXN, margen,
-    techoMXN: redondear(presupuestoMXN * (1 + margen)), estado: 'borrador', modoSimulado: true,
+    techoMXN: redondear(presupuestoMXN * (1 + margen)), estado: 'borrador', modoSimulado: true, modoPago: 'simulado',
     totales: { presupuestadoMXN: presupuestoMXN, cotizadoMXN: 0, cobradoMXN: 0, costoPorAsistenteMXN: 0 },
     partidas: [], timeline: [],
   };

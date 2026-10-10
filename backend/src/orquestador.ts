@@ -66,12 +66,15 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
   interno.ejecutando = true;
   const log = (actor: Actor, mensaje: string) => evento.timeline.push({ hora: deps.ahora().toISOString(), actor, mensaje });
   try {
+    evento.modoPago = deps.reap.modoPago;
+    evento.modoSimulado = deps.reap.modoSimulado || deps.reap.modoPago === 'simulado';
     const plan = armarPlan(evento, !deps.reap.modoSimulado);
     log('agente', `Armó ${plan.length} partidas para ${evento.asistentes} asistentes con presupuesto de ${evento.presupuestoMXN} MXN`);
     const elegidas: (Elegida | null)[] = [];
     evento.partidas = plan.map((p) => ({
       nombre: p.nombre, comercio: p.preferido.comercio, presupuestadoMXN: p.presupuestadoMXN,
       cotizadoMXN: null, cobradoMXN: null, estado: 'pendiente', orderId: null, tipoCambio: null,
+      checkoutId: null, urlAprobacion: null, aprobacionExpira: null,
     }));
 
     const cotizar = async (item: ItemPlan): Promise<Elegida | null> => {
@@ -120,6 +123,7 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
     // 3. Validar el plan completo ANTES de pagar
     const total = redondear(elegidas.reduce((s, e) => s + (e?.mxn ?? 0), 0));
     const hayReplan = elegidas.some((e) => e?.replaneada);
+    interno.hayReplan = hayReplan;
     evento.totales.cotizadoMXN = total;
     const verTecho = reglaTecho(total, evento.presupuestoMXN, evento.margen);
     log('reglas', verTecho.motivo);
@@ -158,7 +162,13 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
           continue;
         }
         (interno.checkouts[i] ??= []).push(r.checkout.status);
-        if (r.checkout.status === 'COMPLETED') {
+        if (r.checkout.status === 'REQUIRES_ACTION' && r.checkout.nextAction?.url) {
+          part.estado = 'por_aprobar';
+          part.checkoutId = r.checkout.id;
+          part.urlAprobacion = r.checkout.nextAction.url;
+          part.aprobacionExpira = r.checkout.nextAction.expiresAt;
+          log('agente', `Creó el cargo de ${part.nombre} por ${el.mxn} MXN; espera aprobación en Reap`);
+        } else if (r.checkout.status === 'COMPLETED') {
           const cobrado = aMXN(r.checkout.finalAmount ?? el.cot.finalAmount, r.checkout.moneda, deps.fx).montoMXN;
           part.cobradoMXN = cobrado;
           part.orderId = r.checkout.orderId;
@@ -171,7 +181,9 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
         }
       }
       evento.totales.cobradoMXN = redondear(evento.partidas.reduce((s, p) => s + (p.cobradoMXN ?? 0), 0));
-      if (fallo) {
+      if (evento.partidas.some((p) => p.estado === 'por_aprobar')) {
+        evento.estado = 'por_aprobar';
+      } else if (fallo) {
         evento.estado = 'revision_humana';
         log('reglas', 'Alguna partida no se pudo pagar; el evento pasa a revisión humana');
       } else if (hayReplan || total > evento.presupuestoMXN) {
@@ -187,5 +199,51 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
     return evento;
   } finally {
     interno.ejecutando = false;
+  }
+}
+
+const MIN_RONDA_MS = 2000;
+
+// Consulta en Reap los checkouts pendientes de aprobación humana (máx. una ronda cada 2 s por evento).
+export async function refrescar(deps: Deps, evento: Evento, interno: Interno): Promise<Evento> {
+  if (evento.estado !== 'por_aprobar' || interno.refrescando) return evento;
+  const t = deps.ahora().getTime();
+  if (t - interno.ultimaRonda < MIN_RONDA_MS) return evento;
+  interno.ultimaRonda = t;
+  interno.refrescando = true;
+  const log = (actor: Actor, mensaje: string) => evento.timeline.push({ hora: deps.ahora().toISOString(), actor, mensaje });
+  try {
+    for (let i = 0; i < evento.partidas.length; i++) {
+      const part = evento.partidas[i];
+      if (part.estado !== 'por_aprobar' || !part.checkoutId) continue;
+      let c: Checkout;
+      try {
+        c = await deps.reap.obtenerCheckout(part.checkoutId);
+      } catch {
+        continue; // error transitorio: sigue pendiente
+      }
+      if (c.status === 'PROCESSING' || c.status === 'COMPLETED') {
+        const cobrado = c.finalAmount != null ? aMXN(c.finalAmount, c.moneda, deps.fx).montoMXN : (part.cotizadoMXN ?? 0);
+        part.cobradoMXN = cobrado;
+        part.orderId = c.orderId;
+        part.estado = c.status === 'COMPLETED' ? 'pagado' : 'aprobado';
+        (interno.checkouts[i] ??= []).push(c.status);
+        log('humano', `Aprobó el cargo de ${part.nombre} en Reap (${cobrado} MXN, orden ${c.orderId})`);
+      } else if (c.status === 'FAILED' || c.status === 'EXPIRED') {
+        part.estado = 'no_lograda';
+        log('reglas', `El cargo de ${part.nombre} terminó en ${c.status}; no se cobró`);
+      }
+    }
+    evento.totales.cobradoMXN = redondear(evento.partidas.reduce((s, p) => s + (p.cobradoMXN ?? 0), 0));
+    if (evento.partidas.some((p) => p.estado === 'por_aprobar')) evento.estado = 'por_aprobar';
+    else if (evento.partidas.some((p) => p.estado === 'no_lograda')) evento.estado = 'revision_humana';
+    else if (interno.hayReplan || evento.totales.cotizadoMXN > evento.presupuestoMXN) evento.estado = 'ajustado';
+    else evento.estado = 'pagado';
+    const base = evento.totales.cobradoMXN > 0 ? evento.totales.cobradoMXN : evento.totales.cotizadoMXN;
+    evento.totales.costoPorAsistenteMXN = redondear(base / evento.asistentes);
+    if (evento.estado !== 'por_aprobar') log('agente', `Evento en estado ${evento.estado}`);
+    return evento;
+  } finally {
+    interno.refrescando = false;
   }
 }

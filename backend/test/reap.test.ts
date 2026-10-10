@@ -138,21 +138,27 @@ test('ReapReal.cotizar: comercio sin nombre verificado no consulta a Reap', asyn
   } finally { f.restaurar(); }
 });
 
-test('ReapReal.crearCheckout: sondea hasta FAILED y no cuenta como COMPLETED', async () => {
-  let gets = 0;
-  const f = conFetch((url, init) => {
-    if (init.method === 'POST') return { id: 'c1', status: 'REQUIRES_ACTION', amount: { amount: 360, currency: 'MXN' }, nextAction: { type: 'REDIRECT', url: 'u' } };
-    gets += 1;
-    return gets < 3 ? { id: 'c1', status: 'REQUIRES_ACTION' } : { id: 'c1', status: 'FAILED', orderId: 'ord_1', finalAmount: { amount: 360, currency: 'MXN' }, nextAction: null };
-  });
+test('ReapReal.crearCheckout (aprobacion): sin header de simulación, devuelve REQUIRES_ACTION con nextAction y no sondea', async () => {
+  const f = conFetch(() => ({ id: 'c1', status: 'REQUIRES_ACTION', amount: { amount: 360, currency: 'MXN' }, nextAction: { type: 'REDIRECT', url: 'https://aprobar/x', expiresAt: '2026-10-09T12:15:00Z' } }));
   try {
     const cot = { id: 'q', comercio: 'blendstation.com.mx', productoId: 'p', nombreProducto: 'x', cantidad: 1, moneda: 'MXN', finalAmount: 360, expiresAt: '', paisEnvio: 'MX' };
     const c = await new ReapReal(cfg).crearCheckout(cot);
-    assert.equal(c.status, 'FAILED');
-    assert.equal(c.orderId, 'ord_1');
-    assert.equal(gets, 3);
+    assert.equal(c.status, 'REQUIRES_ACTION');
+    assert.equal(c.nextAction?.url, 'https://aprobar/x');
+    assert.equal(f.llamadas.length, 1);
     assert.equal(JSON.parse(f.llamadas[0].init.body).enrollmentId, 'enr');
-    assert.equal(f.llamadas[0].init.headers['X-Simulate-Checkout'], 'COMPLETED');
+    assert.equal(f.llamadas[0].init.headers['X-Simulate-Checkout'], undefined);
+  } finally { f.restaurar(); }
+});
+
+test('ReapReal.crearCheckout (simulado): local, sin red, orderId sim_', async () => {
+  const f = conFetch(() => { throw new Error('no debe llamar a la red'); });
+  try {
+    const cot = { id: 'q', comercio: 'blendstation.com.mx', productoId: 'p', nombreProducto: 'x', cantidad: 1, moneda: 'MXN', finalAmount: 360, expiresAt: '', paisEnvio: 'MX' };
+    const c = await new ReapReal({ ...cfg, modoPago: 'simulado' }).crearCheckout(cot);
+    assert.equal(c.status, 'COMPLETED');
+    assert.ok(c.orderId?.startsWith('sim_'));
+    assert.equal(f.llamadas.length, 0);
   } finally { f.restaurar(); }
 });
 

@@ -4,7 +4,7 @@ import { redondear } from './tipos.ts';
 import { Store } from './store.ts';
 import { validarBrief } from './validacion.ts';
 import type { Deps } from './orquestador.ts';
-import { ejecutar } from './orquestador.ts';
+import { ejecutar, refrescar } from './orquestador.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -61,7 +61,8 @@ export function crearServidor(deps: Deps, store: Store = new Store()): http.Serv
           margen: b.margen,
           techoMXN: redondear(b.presupuestoMXN * (1 + b.margen)),
           estado: 'borrador',
-          modoSimulado: deps.reap.modoSimulado,
+          modoSimulado: deps.reap.modoSimulado || deps.reap.modoPago === 'simulado',
+          modoPago: deps.reap.modoPago,
           totales: { presupuestadoMXN: b.presupuestoMXN, cotizadoMXN: 0, cobradoMXN: 0, costoPorAsistenteMXN: 0 },
           partidas: [],
           timeline: [],
@@ -75,7 +76,10 @@ export function crearServidor(deps: Deps, store: Store = new Store()): http.Serv
       if (m) {
         const evento = store.obtener(m[1]);
         if (!evento) return enviar(res, 404, { error: 'Evento no encontrado' });
-        if (!m[2] && metodo === 'GET') return enviar(res, 200, evento);
+        if (!m[2] && metodo === 'GET') {
+          await refrescar(deps, evento, store.interno(evento.id));
+          return enviar(res, 200, evento);
+        }
         if (m[2] && metodo === 'POST') {
           await ejecutar(deps, evento, store.interno(evento.id));
           return enviar(res, 200, evento);

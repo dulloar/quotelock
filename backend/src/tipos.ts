@@ -1,8 +1,9 @@
 export type Margen = 0.1 | 0.2 | 0.3;
 export const MARGENES_VALIDOS: number[] = [0.1, 0.2, 0.3];
 
-export type EstadoEvento = 'borrador' | 'pagado' | 'ajustado' | 'revision_humana';
-export type EstadoPartida = 'pendiente' | 'pagado' | 'ajustado' | 'no_lograda' | 'bloqueado';
+export type EstadoEvento = 'borrador' | 'por_aprobar' | 'pagado' | 'ajustado' | 'revision_humana';
+export type EstadoPartida = 'pendiente' | 'por_aprobar' | 'aprobado' | 'pagado' | 'ajustado' | 'no_lograda' | 'bloqueado';
+export type ModoPago = 'aprobacion' | 'simulado';
 export type Actor = 'agente' | 'reglas' | 'humano';
 
 export interface Brief {
@@ -23,6 +24,9 @@ export interface Partida {
   estado: EstadoPartida;
   orderId: string | null;
   tipoCambio: number | null;
+  checkoutId: string | null;
+  urlAprobacion: string | null;
+  aprobacionExpira: string | null;
 }
 
 export interface EntradaTimeline {
@@ -49,6 +53,7 @@ export interface Evento {
   techoMXN: number;
   estado: EstadoEvento;
   modoSimulado: boolean;
+  modoPago: ModoPago;
   totales: Totales;
   partidas: Partida[];
   timeline: EntradaTimeline[];
