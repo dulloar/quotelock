@@ -1,0 +1,30 @@
+#!/bin/sh
+# Bloquea commits que incluyan archivos .env o llaves de API.
+# Activar una vez por clon: git config core.hooksPath .githooks
+raiz=$(git rev-parse --show-toplevel)
+
+if git diff --cached --name-only | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$' >/dev/null; then
+  echo "BLOQUEADO: hay un archivo .env en el commit. Quítalo con: git restore --staged <archivo>"
+  exit 1
+fi
+
+agregado=$(git diff --cached -U0 | grep '^+' | grep -v '^+++')
+
+if printf '%s\n' "$agregado" | grep -E 'sk-[A-Za-z0-9_-]{20,}|Bearer [A-Za-z0-9_.-]{20,}' >/dev/null; then
+  echo "BLOQUEADO: el commit parece contener una llave de API (patrón sk-... o Bearer ...)."
+  exit 1
+fi
+
+# Compara contra los valores reales del .env local, sin imprimirlos.
+if [ -f "$raiz/.env" ]; then
+  while IFS='=' read -r nombre valor; do
+    case "$nombre" in
+      *KEY*|*TOKEN*|*SECRET*)
+        if [ ${#valor} -ge 12 ] && printf '%s\n' "$agregado" | grep -F -- "$valor" >/dev/null; then
+          echo "BLOQUEADO: el commit contiene el valor de $nombre de tu .env."
+          exit 1
+        fi ;;
+    esac
+  done < "$raiz/.env"
+fi
+exit 0
