@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ListaEventos } from './pantallas/ListaEventos';
+import { NuevoEvento } from './pantallas/NuevoEvento';
 import { PantallaEvento } from './pantallas/PantallaEvento';
 
 function rutaActual(): string {
@@ -25,7 +26,9 @@ export function App() {
         </a>
         <span className="barra__lema">El agente no compra: gobierna el dinero del evento</span>
       </header>
-      <main>{idEvento ? <PantallaEvento id={idEvento} /> : <ListaEventos />}</main>
+      <main>
+        {idEvento ? <PantallaEvento id={idEvento} /> : ruta === '/nuevo' ? <NuevoEvento /> : <ListaEventos />}
+      </main>
     </div>
   );
 }

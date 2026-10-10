@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
-import { obtenerEvento } from '../datos/fuente';
+import { mensajeDeError, obtenerEvento } from '../datos/fuente';
+import type { Lectura } from '../datos/fuente';
 import {
   ETIQUETA_ESTADO_EVENTO,
   ETIQUETA_ESTADO_PARTIDA,
   fechaLarga,
   horaCorta,
+  mensajeLegible,
   mxn,
   porcentaje,
 } from '../formato';
 import type { Actor, Evento, Partida } from '../tipos';
+import { AvisoSinConexion } from './AvisoSinConexion';
 
 const ETIQUETA_ACTOR: Record<Actor, string> = {
   agente: 'Agente',
@@ -168,7 +171,7 @@ function LineaTiempo({ evento }: { evento: Evento }) {
               {horaCorta(paso.hora)}
             </time>
             <span className="tiempo__actor">{ETIQUETA_ACTOR[paso.actor]}</span>
-            <span className="tiempo__mensaje">{paso.mensaje}</span>
+            <span className="tiempo__mensaje">{mensajeLegible(paso.mensaje)}</span>
           </li>
         ))}
       </ol>
@@ -204,19 +207,41 @@ function Contador({ evento }: { evento: Evento }) {
 }
 
 export function PantallaEvento({ id }: { id: string }) {
-  const [evento, setEvento] = useState<Evento | null | undefined>(undefined);
+  const [lectura, setLectura] = useState<Lectura<Evento | null> | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setEvento(undefined);
-    obtenerEvento(id).then(setEvento);
+    let vigente = true;
+    setLectura(null);
+    setError(null);
+    obtenerEvento(id)
+      .then((l) => vigente && setLectura(l))
+      .catch((e) => vigente && setError(mensajeDeError(e)));
+    return () => {
+      vigente = false;
+    };
   }, [id]);
 
-  if (evento === undefined) return <p className="vacio">Cargando evento…</p>;
+  if (error) {
+    return (
+      <p className="aviso aviso--error" role="alert">
+        No se pudo leer el evento {id}: {error} <a href="#/">Volver a la lista</a>
+      </p>
+    );
+  }
+  if (!lectura) return <p className="vacio">Cargando evento…</p>;
+
+  const sinConexion = lectura.origen === 'ejemplo';
+  const evento = lectura.datos;
   if (evento === null) {
     return (
-      <p className="vacio">
-        No existe el evento {id}. <a href="#/">Volver a la lista</a>
-      </p>
+      <>
+        {sinConexion && <AvisoSinConexion />}
+        <p className="vacio">
+          {sinConexion ? `El evento ${id} no está entre los datos de ejemplo.` : `No existe el evento ${id}.`}{' '}
+          <a href="#/">Volver a la lista</a>
+        </p>
+      </>
     );
   }
 
@@ -228,6 +253,7 @@ export function PantallaEvento({ id }: { id: string }) {
       <a href="#/" className="regreso">
         ← Eventos
       </a>
+      {sinConexion && <AvisoSinConexion />}
       <header className="evento__encabezado">
         <div>
           <h1 className="titulo">{evento.nombre}</h1>

@@ -4,43 +4,155 @@
     "nombre": "Workshop corporativo",
     "fecha": "2026-10-24",
     "asistentes": 40,
-    "presupuestoMXN": 25000,
-    "margen": 0.2,
-    "techoMXN": 30000,
+    "presupuestoMXN": 5500,
+    "margen": 0.3,
+    "techoMXN": 7150,
     "estado": "ajustado",
     "modoSimulado": true,
-    "totales": { "presupuestadoMXN": 25000, "cotizadoMXN": 27400, "cobradoMXN": 27400, "costoPorAsistenteMXN": 685 },
+    "totales": {
+      "presupuestadoMXN": 5500,
+      "cotizadoMXN": 6718.9,
+      "cobradoMXN": 6718.9,
+      "costoPorAsistenteMXN": 167.97
+    },
     "partidas": [
-      { "nombre": "Café para el evento", "comercio": "blendstation.com.mx",
-        "presupuestadoMXN": 6000, "cotizadoMXN": 5840, "cobradoMXN": 5840,
-        "estado": "pagado", "orderId": "ord_sim_1001", "tipoCambio": null },
-      { "nombre": "Kit del asistente", "comercio": "baronfig.com",
-        "presupuestadoMXN": 9000, "cotizadoMXN": 8930, "cobradoMXN": 8930,
-        "estado": "pagado", "orderId": "ord_sim_1002", "tipoCambio": 18.5 },
-      { "nombre": "Postres", "comercio": "levainbakery.com",
-        "presupuestadoMXN": 4000, "cotizadoMXN": 4310, "cobradoMXN": 4310,
-        "estado": "ajustado", "orderId": "ord_sim_1003", "tipoCambio": 18.5 },
-      { "nombre": "Regalo para ponentes", "comercio": "twelvesouth.com",
-        "presupuestadoMXN": 6000, "cotizadoMXN": 8320, "cobradoMXN": 8320,
-        "estado": "ajustado", "orderId": "ord_sim_1004", "tipoCambio": 18.5 }
+      {
+        "nombre": "Café para el evento",
+        "comercio": "blendstation.com.mx",
+        "presupuestadoMXN": 550,
+        "cotizadoMXN": 1599,
+        "cobradoMXN": 1599,
+        "estado": "ajustado",
+        "orderId": "ord_sim_10",
+        "tipoCambio": 1
+      },
+      {
+        "nombre": "Kit del asistente",
+        "comercio": "stationerypal.com",
+        "presupuestadoMXN": 2200,
+        "cotizadoMXN": 1135.9,
+        "cobradoMXN": 1135.9,
+        "estado": "ajustado",
+        "orderId": "ord_sim_11",
+        "tipoCambio": 18.5
+      },
+      {
+        "nombre": "Postres",
+        "comercio": "levainbakery.com",
+        "presupuestadoMXN": 1650,
+        "cotizadoMXN": 3108,
+        "cobradoMXN": 3108,
+        "estado": "ajustado",
+        "orderId": "ord_sim_12",
+        "tipoCambio": 18.5
+      },
+      {
+        "nombre": "Regalo para 3 ponentes",
+        "comercio": "acteck.com",
+        "presupuestadoMXN": 1100,
+        "cotizadoMXN": 876,
+        "cobradoMXN": 876,
+        "estado": "ajustado",
+        "orderId": "ord_sim_13",
+        "tipoCambio": 1
+      }
     ],
     "timeline": [
-      { "hora": "2026-10-09T19:40:00Z", "actor": "agente", "mensaje": "Armó el presupuesto en 4 partidas: $625 por asistente" },
-      { "hora": "2026-10-09T19:40:02Z", "actor": "agente", "mensaje": "Cotizó café en blendstation.com.mx: $5,840" },
-      { "hora": "2026-10-09T19:40:03Z", "actor": "reglas", "mensaje": "Café cabe en su partida. Aprobado" },
-      { "hora": "2026-10-09T19:40:04Z", "actor": "agente", "mensaje": "Pagó café con Reap (ord_sim_1001)" },
-      { "hora": "2026-10-09T19:40:06Z", "actor": "agente", "mensaje": "Cotizó kit del asistente en baronfig.com: $8,930" },
-      { "hora": "2026-10-09T19:40:07Z", "actor": "reglas", "mensaje": "Kit cabe en su partida. Aprobado" },
-      { "hora": "2026-10-09T19:40:08Z", "actor": "agente", "mensaje": "Pagó kit del asistente con Reap (ord_sim_1002)" },
-      { "hora": "2026-10-09T19:40:10Z", "actor": "agente", "mensaje": "Cotizó postres en levainbakery.com: $4,310" },
-      { "hora": "2026-10-09T19:40:11Z", "actor": "reglas", "mensaje": "Postres rebasa su partida por $310; el total sigue bajo el techo. Aprobado con ajuste" },
-      { "hora": "2026-10-09T19:40:12Z", "actor": "agente", "mensaje": "Pagó postres con Reap (ord_sim_1003)" },
-      { "hora": "2026-10-09T19:40:14Z", "actor": "agente", "mensaje": "Cotizó regalo para ponentes en keychron.com: $11,280" },
-      { "hora": "2026-10-09T19:40:15Z", "actor": "reglas", "mensaje": "Regalo para ponentes llevaría el total a $30,360, arriba del techo de $30,000. Bloqueado" },
-      { "hora": "2026-10-09T19:40:17Z", "actor": "agente", "mensaje": "Cambió de comercio y cotizó el regalo en twelvesouth.com: $8,320" },
-      { "hora": "2026-10-09T19:40:18Z", "actor": "reglas", "mensaje": "Regalo rebasa su partida por $2,320; el total queda en $27,400, bajo el techo. Aprobado con ajuste" },
-      { "hora": "2026-10-09T19:40:19Z", "actor": "agente", "mensaje": "Pagó regalo para ponentes con Reap (ord_sim_1004)" },
-      { "hora": "2026-10-09T19:40:21Z", "actor": "agente", "mensaje": "Concilió 4 cargos: lo cobrado coincide con lo cotizado" }
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "agente",
+        "mensaje": "Armó 4 partidas para 40 asistentes con presupuesto de 5500 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 8 bolsas de café en blendstation.com.mx: 2499 MXN (tope de la partida 550 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "reglas",
+        "mensaje": "Café para el evento rebasa su tope de 550 MXN; se intenta una alternativa más barata"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "agente",
+        "mensaje": "Replaneó Café para el evento: café en porción reducida en blendstation.com.mx por 1599 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 40 planners en mossery.co: 10082.5 MXN (tope de la partida 2200 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "reglas",
+        "mensaje": "Kit del asistente rebasa su tope de 2200 MXN; se intenta una alternativa más barata"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "agente",
+        "mensaje": "Replaneó Kit del asistente: 40 notepads en stationerypal.com por 1135.9 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 10 cajas de galletas en levainbakery.com: 6068 MXN (tope de la partida 1650 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "reglas",
+        "mensaje": "Postres rebasa su tope de 1650 MXN; se intenta una alternativa más barata"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "agente",
+        "mensaje": "Replaneó Postres: galletas en media porción en levainbakery.com por 3108 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 3 teclados en keychron.com: 2885.45 MXN (tope de la partida 1100 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.450Z",
+        "actor": "reglas",
+        "mensaje": "Regalo para 3 ponentes rebasa su tope de 1100 MXN; se intenta una alternativa más barata"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.451Z",
+        "actor": "agente",
+        "mensaje": "Replaneó Regalo para 3 ponentes: 3 mouse en acteck.com por 876 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.451Z",
+        "actor": "reglas",
+        "mensaje": "El total 6718.9 MXN excede el presupuesto pero cabe en el techo de 7150 MXN (margen 30%)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.451Z",
+        "actor": "agente",
+        "mensaje": "Pagó Café para el evento en blendstation.com.mx: 1599 MXN (orden ord_sim_10)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.451Z",
+        "actor": "agente",
+        "mensaje": "Pagó Kit del asistente en stationerypal.com: 1135.9 MXN (orden ord_sim_11)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.451Z",
+        "actor": "agente",
+        "mensaje": "Pagó Postres en levainbakery.com: 3108 MXN (orden ord_sim_12)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.451Z",
+        "actor": "agente",
+        "mensaje": "Pagó Regalo para 3 ponentes en acteck.com: 876 MXN (orden ord_sim_13)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.451Z",
+        "actor": "agente",
+        "mensaje": "Evento en estado ajustado"
+      }
     ]
   },
   {
@@ -53,30 +165,110 @@
     "techoMXN": 33000,
     "estado": "pagado",
     "modoSimulado": true,
-    "totales": { "presupuestadoMXN": 30000, "cotizadoMXN": 25560, "cobradoMXN": 25560, "costoPorAsistenteMXN": 639 },
+    "totales": {
+      "presupuestadoMXN": 30000,
+      "cotizadoMXN": 21534.95,
+      "cobradoMXN": 21534.95,
+      "costoPorAsistenteMXN": 538.37
+    },
     "partidas": [
-      { "nombre": "Café para el evento", "comercio": "blendstation.com.mx",
-        "presupuestadoMXN": 7000, "cotizadoMXN": 5840, "cobradoMXN": 5840,
-        "estado": "pagado", "orderId": "ord_sim_2001", "tipoCambio": null },
-      { "nombre": "Kit del asistente", "comercio": "baronfig.com",
-        "presupuestadoMXN": 11000, "cotizadoMXN": 8930, "cobradoMXN": 8930,
-        "estado": "pagado", "orderId": "ord_sim_2002", "tipoCambio": 18.5 },
-      { "nombre": "Postres", "comercio": "levainbakery.com",
-        "presupuestadoMXN": 5000, "cotizadoMXN": 4310, "cobradoMXN": 4310,
-        "estado": "pagado", "orderId": "ord_sim_2003", "tipoCambio": 18.5 },
-      { "nombre": "Regalo para ponentes", "comercio": "twelvesouth.com",
-        "presupuestadoMXN": 7000, "cotizadoMXN": 6480, "cobradoMXN": 6480,
-        "estado": "pagado", "orderId": "ord_sim_2004", "tipoCambio": 18.5 }
+      {
+        "nombre": "Café para el evento",
+        "comercio": "blendstation.com.mx",
+        "presupuestadoMXN": 3000,
+        "cotizadoMXN": 2499,
+        "cobradoMXN": 2499,
+        "estado": "pagado",
+        "orderId": "ord_sim_18",
+        "tipoCambio": 1
+      },
+      {
+        "nombre": "Kit del asistente",
+        "comercio": "mossery.co",
+        "presupuestadoMXN": 12000,
+        "cotizadoMXN": 10082.5,
+        "cobradoMXN": 10082.5,
+        "estado": "pagado",
+        "orderId": "ord_sim_19",
+        "tipoCambio": 18.5
+      },
+      {
+        "nombre": "Postres",
+        "comercio": "levainbakery.com",
+        "presupuestadoMXN": 9000,
+        "cotizadoMXN": 6068,
+        "cobradoMXN": 6068,
+        "estado": "pagado",
+        "orderId": "ord_sim_20",
+        "tipoCambio": 18.5
+      },
+      {
+        "nombre": "Regalo para 3 ponentes",
+        "comercio": "keychron.com",
+        "presupuestadoMXN": 6000,
+        "cotizadoMXN": 2885.45,
+        "cobradoMXN": 2885.45,
+        "estado": "pagado",
+        "orderId": "ord_sim_21",
+        "tipoCambio": 18.5
+      }
     ],
     "timeline": [
-      { "hora": "2026-10-09T20:05:00Z", "actor": "agente", "mensaje": "Armó el presupuesto en 4 partidas: $750 por asistente" },
-      { "hora": "2026-10-09T20:05:02Z", "actor": "agente", "mensaje": "Cotizó las 4 partidas: $25,560 en total" },
-      { "hora": "2026-10-09T20:05:03Z", "actor": "reglas", "mensaje": "Las 4 cotizaciones caben en su partida. Aprobado" },
-      { "hora": "2026-10-09T20:05:05Z", "actor": "agente", "mensaje": "Pagó café con Reap (ord_sim_2001)" },
-      { "hora": "2026-10-09T20:05:06Z", "actor": "agente", "mensaje": "Pagó kit del asistente con Reap (ord_sim_2002)" },
-      { "hora": "2026-10-09T20:05:07Z", "actor": "agente", "mensaje": "Pagó postres con Reap (ord_sim_2003)" },
-      { "hora": "2026-10-09T20:05:08Z", "actor": "agente", "mensaje": "Pagó regalo para ponentes con Reap (ord_sim_2004)" },
-      { "hora": "2026-10-09T20:05:10Z", "actor": "agente", "mensaje": "Concilió 4 cargos: sobran $4,440 del presupuesto" }
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "agente",
+        "mensaje": "Armó 4 partidas para 40 asistentes con presupuesto de 30000 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 8 bolsas de café en blendstation.com.mx: 2499 MXN (tope de la partida 3000 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 40 planners en mossery.co: 10082.5 MXN (tope de la partida 12000 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 10 cajas de galletas en levainbakery.com: 6068 MXN (tope de la partida 9000 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 3 teclados en keychron.com: 2885.45 MXN (tope de la partida 6000 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "reglas",
+        "mensaje": "El total 21534.95 MXN cabe en el presupuesto de 30000 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "agente",
+        "mensaje": "Pagó Café para el evento en blendstation.com.mx: 2499 MXN (orden ord_sim_18)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "agente",
+        "mensaje": "Pagó Kit del asistente en mossery.co: 10082.5 MXN (orden ord_sim_19)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "agente",
+        "mensaje": "Pagó Postres en levainbakery.com: 6068 MXN (orden ord_sim_20)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "agente",
+        "mensaje": "Pagó Regalo para 3 ponentes en keychron.com: 2885.45 MXN (orden ord_sim_21)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.479Z",
+        "actor": "agente",
+        "mensaje": "Evento en estado pagado"
+      }
     ]
   },
   {
@@ -84,34 +276,140 @@
     "nombre": "Capacitación de producto",
     "fecha": "2026-11-20",
     "asistentes": 40,
-    "presupuestoMXN": 18000,
+    "presupuestoMXN": 5500,
     "margen": 0.1,
-    "techoMXN": 19800,
+    "techoMXN": 6050,
     "estado": "revision_humana",
     "modoSimulado": true,
-    "totales": { "presupuestadoMXN": 18000, "cotizadoMXN": 22810, "cobradoMXN": 0, "costoPorAsistenteMXN": 570.25 },
+    "totales": {
+      "presupuestadoMXN": 5500,
+      "cotizadoMXN": 6718.9,
+      "cobradoMXN": 0,
+      "costoPorAsistenteMXN": 167.97
+    },
     "partidas": [
-      { "nombre": "Café para el evento", "comercio": "blendstation.com.mx",
-        "presupuestadoMXN": 4500, "cotizadoMXN": 5840, "cobradoMXN": null,
-        "estado": "bloqueado", "orderId": null, "tipoCambio": null },
-      { "nombre": "Kit del asistente", "comercio": "mossery.co",
-        "presupuestadoMXN": 6500, "cotizadoMXN": 7450, "cobradoMXN": null,
-        "estado": "bloqueado", "orderId": null, "tipoCambio": 18.5 },
-      { "nombre": "Postres", "comercio": "levainbakery.com",
-        "presupuestadoMXN": 3000, "cotizadoMXN": 4310, "cobradoMXN": null,
-        "estado": "bloqueado", "orderId": null, "tipoCambio": 18.5 },
-      { "nombre": "Regalo para ponentes", "comercio": "twelvesouth.com",
-        "presupuestadoMXN": 4000, "cotizadoMXN": 5210, "cobradoMXN": null,
-        "estado": "bloqueado", "orderId": null, "tipoCambio": 18.5 }
+      {
+        "nombre": "Café para el evento",
+        "comercio": "blendstation.com.mx",
+        "presupuestadoMXN": 550,
+        "cotizadoMXN": 1599,
+        "cobradoMXN": null,
+        "estado": "bloqueado",
+        "orderId": null,
+        "tipoCambio": 1
+      },
+      {
+        "nombre": "Kit del asistente",
+        "comercio": "stationerypal.com",
+        "presupuestadoMXN": 2200,
+        "cotizadoMXN": 1135.9,
+        "cobradoMXN": null,
+        "estado": "bloqueado",
+        "orderId": null,
+        "tipoCambio": 18.5
+      },
+      {
+        "nombre": "Postres",
+        "comercio": "levainbakery.com",
+        "presupuestadoMXN": 1650,
+        "cotizadoMXN": 3108,
+        "cobradoMXN": null,
+        "estado": "bloqueado",
+        "orderId": null,
+        "tipoCambio": 18.5
+      },
+      {
+        "nombre": "Regalo para 3 ponentes",
+        "comercio": "acteck.com",
+        "presupuestadoMXN": 1100,
+        "cotizadoMXN": 876,
+        "cobradoMXN": null,
+        "estado": "bloqueado",
+        "orderId": null,
+        "tipoCambio": 1
+      }
     ],
     "timeline": [
-      { "hora": "2026-10-09T20:30:00Z", "actor": "agente", "mensaje": "Armó el presupuesto en 4 partidas: $450 por asistente" },
-      { "hora": "2026-10-09T20:30:02Z", "actor": "agente", "mensaje": "Cotizó las 4 partidas: $25,560 en total" },
-      { "hora": "2026-10-09T20:30:03Z", "actor": "reglas", "mensaje": "El total rebasa el techo de $19,800 por $5,760. Bloqueado" },
-      { "hora": "2026-10-09T20:30:05Z", "actor": "agente", "mensaje": "Replaneó con las alternativas más baratas: kit en mossery.co y otro regalo en twelvesouth.com" },
-      { "hora": "2026-10-09T20:30:07Z", "actor": "agente", "mensaje": "Volvió a cotizar: $22,810 en total" },
-      { "hora": "2026-10-09T20:30:08Z", "actor": "reglas", "mensaje": "El total sigue $3,010 arriba del techo. Ningún ajuste cabe dentro del margen de 10%" },
-      { "hora": "2026-10-09T20:30:09Z", "actor": "reglas", "mensaje": "Se detuvo antes de pagar: 0 cargos creados. Requiere revisión humana" }
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "agente",
+        "mensaje": "Armó 4 partidas para 40 asistentes con presupuesto de 5500 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 8 bolsas de café en blendstation.com.mx: 2499 MXN (tope de la partida 550 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "reglas",
+        "mensaje": "Café para el evento rebasa su tope de 550 MXN; se intenta una alternativa más barata"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "agente",
+        "mensaje": "Replaneó Café para el evento: café en porción reducida en blendstation.com.mx por 1599 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 40 planners en mossery.co: 10082.5 MXN (tope de la partida 2200 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "reglas",
+        "mensaje": "Kit del asistente rebasa su tope de 2200 MXN; se intenta una alternativa más barata"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "agente",
+        "mensaje": "Replaneó Kit del asistente: 40 notepads en stationerypal.com por 1135.9 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 10 cajas de galletas en levainbakery.com: 6068 MXN (tope de la partida 1650 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "reglas",
+        "mensaje": "Postres rebasa su tope de 1650 MXN; se intenta una alternativa más barata"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "agente",
+        "mensaje": "Replaneó Postres: galletas en media porción en levainbakery.com por 3108 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "agente",
+        "mensaje": "Cotizó 3 teclados en keychron.com: 2885.45 MXN (tope de la partida 1100 MXN)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "reglas",
+        "mensaje": "Regalo para 3 ponentes rebasa su tope de 1100 MXN; se intenta una alternativa más barata"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "agente",
+        "mensaje": "Replaneó Regalo para 3 ponentes: 3 mouse en acteck.com por 876 MXN"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "reglas",
+        "mensaje": "El total 6718.9 MXN rebasa el techo de 6050 MXN (margen 10%)"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "reglas",
+        "mensaje": "El total rebasa el techo aun con las alternativas más baratas. No se creó ningún checkout; el evento pasa a revisión humana"
+      },
+      {
+        "hora": "2026-10-10T02:29:47.509Z",
+        "actor": "agente",
+        "mensaje": "Evento en estado revision_humana"
+      }
     ]
   }
 ]
