@@ -42,8 +42,14 @@ export async function pagar(deps: Deps, ctx: ContextoPago): Promise<ResultadoPag
     estadosCheckoutPrevios: ctx.estadosCheckoutPrevios,
   });
   if (!ok) return { ok: false, resultados };
-  const checkout = await deps.reap.crearCheckout(ctx.cotizacion);
-  return { ok: true, resultados, checkout };
+  try {
+    const checkout = await deps.reap.crearCheckout(ctx.cotizacion);
+    return { ok: true, resultados, checkout };
+  } catch (e) {
+    // Error de Reap al crear/sondear el checkout: nada se considera cobrado.
+    const code = e instanceof ReapError ? e.code : 'ERROR';
+    return { ok: true, resultados, checkout: { id: '', status: `ERROR_${code}`, orderId: null, finalAmount: null, moneda: ctx.cotizacion.moneda } };
+  }
 }
 
 interface Elegida {
@@ -60,7 +66,7 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
   interno.ejecutando = true;
   const log = (actor: Actor, mensaje: string) => evento.timeline.push({ hora: deps.ahora().toISOString(), actor, mensaje });
   try {
-    const plan = armarPlan(evento);
+    const plan = armarPlan(evento, !deps.reap.modoSimulado);
     log('agente', `Armó ${plan.length} partidas para ${evento.asistentes} asistentes con presupuesto de ${evento.presupuestoMXN} MXN`);
     const elegidas: (Elegida | null)[] = [];
     evento.partidas = plan.map((p) => ({
@@ -134,6 +140,13 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
       for (let i = 0; i < plan.length; i++) {
         const el = elegidas[i]!;
         const part = evento.partidas[i];
+        if (fallo && part.estado === 'no_lograda') continue;
+        if (fallo && evento.partidas.some((x) => x.estado === 'no_lograda')) {
+          // Un checkout ya falló: no se siguen creando cobros hasta que una persona revise.
+          part.estado = 'bloqueado';
+          log('reglas', `Pago de ${part.nombre} detenido: un checkout anterior no se completó`);
+          continue;
+        }
         const r = await pagar(deps, {
           presupuestoMXN: evento.presupuestoMXN, margen: evento.margen, cotizacion: el.cot,
           totalPlanMXN: total, estadosCheckoutPrevios: interno.checkouts[i] ?? [],

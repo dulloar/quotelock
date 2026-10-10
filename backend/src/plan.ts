@@ -18,9 +18,10 @@ export interface PartidaPlan {
 }
 
 // Reparto del presupuesto: café 10%, kit 40%, postres 30%, regalo ponentes 20%.
-export function armarPlan(evento: Pick<Evento, 'asistentes' | 'presupuestoMXN'>): PartidaPlan[] {
+export function armarPlan(evento: Pick<Evento, 'asistentes' | 'presupuestoMXN'>, real = false): PartidaPlan[] {
   const n = evento.asistentes;
   const p = evento.presupuestoMXN;
+  if (real) return armarPlanReal(n, p);
   const cajasPostre = Math.ceil(n / 4); // 1 pieza por asistente
   const bolsasCafe = Math.max(1, Math.ceil(n / 5));
   return [
@@ -56,6 +57,37 @@ export function armarPlan(evento: Pick<Evento, 'asistentes' | 'presupuestoMXN'>)
         { comercio: 'satechi.net', productoId: 'hub', query: 'usb-c hub', cantidad: 3, descripcion: '3 hubs USB-C' },
         { comercio: 'acteck.com', productoId: 'mouse', query: 'mouse', cantidad: 3, descripcion: '3 mouse' },
       ],
+    },
+  ];
+}
+
+// Plan para el catálogo REAL del sandbox: solo comercios verificados (ver COMERCIOS[..].nombre).
+// No hay comercio de postres verificado, así que el reparto es: café 20%, kit 50%, regalo 30%.
+// El cliente real elige el producto disponible más barato que pase las reglas; productoId no se usa.
+function armarPlanReal(n: number, p: number): PartidaPlan[] {
+  const bolsasCafe = Math.max(1, Math.ceil(n / 5));
+  const item = (comercio: string, query: string, cantidad: number, descripcion: string): ItemPlan => ({ comercio, productoId: '', query, cantidad, descripcion });
+  return [
+    {
+      nombre: 'Café para el evento',
+      presupuestadoMXN: redondear(p * 0.2),
+      preferido: item('blendstation.com.mx', 'cafe', bolsasCafe, `${bolsasCafe} bolsas de café`),
+      alternativas: [item('blendstation.com.mx', 'cafe', Math.max(1, Math.ceil(bolsasCafe * 0.6)), 'café en porción reducida')],
+    },
+    {
+      nombre: 'Kit del asistente',
+      presupuestadoMXN: redondear(p * 0.5),
+      preferido: item('stationerypal.com', 'notepad', n, `${n} notepads`),
+      alternativas: [
+        item('stationerypal.com', 'memo pad', n, `${n} memo pads`),
+        item('stationerypal.com', 'memo pad', Math.max(1, Math.ceil(n * 0.6)), 'memo pads en porción reducida'),
+      ],
+    },
+    {
+      nombre: 'Regalo para 3 ponentes',
+      presupuestadoMXN: redondear(p * 0.3),
+      preferido: item('acteck.com', 'mouse', 3, '3 mouse'),
+      alternativas: [item('stationerypal.com', 'notebook', 3, '3 libretas')],
     },
   ];
 }
