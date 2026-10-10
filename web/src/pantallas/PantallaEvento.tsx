@@ -1,208 +1,358 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { mensajeDeError, obtenerEvento } from '../datos/fuente';
 import type { Lectura } from '../datos/fuente';
+import { BarraTecho } from '../evento/BarraTecho';
 import {
-  ETIQUETA_ESTADO_EVENTO,
-  ETIQUETA_ESTADO_PARTIDA,
-  fechaLarga,
-  horaCorta,
-  mensajeLegible,
-  mxn,
-  porcentaje,
-} from '../formato';
-import type { Actor, Evento, Partida } from '../tipos';
+  cifrasDeApoyo,
+  cuentas,
+  encabezado,
+  grupos,
+  nadieIntervino,
+  pasosClave,
+  salidas,
+  veredicto,
+} from '../evento/derivar';
+import type { Cuentas, Grupo } from '../evento/derivar';
+import { Icono } from '../evento/Icono';
+import type { TipoIcono } from '../evento/Icono';
+import { leerTimeline } from '../evento/leerTimeline';
+import type { LecturaTimeline, LoQueCambio } from '../evento/leerTimeline';
+import { ETIQUETA_ESTADO_EVENTO, fechaLarga, horaCorta, mensajeLegible, mxn, porcentaje } from '../formato';
+import type { Actor, EstadoPartida, Evento, Partida } from '../tipos';
 import { AvisoSinConexion } from './AvisoSinConexion';
+import './evento.css';
 
-const ETIQUETA_ACTOR: Record<Actor, string> = {
-  agente: 'Agente',
-  reglas: 'Reglas',
-  humano: 'Humano',
+// Pantalla del evento, dirección F «El agente te cuenta»: un informe en primera persona.
+// Orden de lectura: frase de estado → cobrado contra el techo → partidas por lo que les pasó
+// → cómo lo hice → datos del evento. Las cuentas viven en ../evento/derivar.ts.
+
+const ETIQUETA_ACTOR: Record<Actor, string> = { agente: 'Agente', reglas: 'Reglas', humano: 'Persona' };
+
+const ICONO_GRUPO: Record<EstadoPartida, TipoIcono> = {
+  pagado: 'cabe',
+  ajustado: 'cambio',
+  bloqueado: 'alto',
+  no_lograda: 'noLograda',
+  pendiente: 'pendiente',
 };
 
-function conSigno(n: number): string {
-  if (n === 0) return mxn(0);
-  return `${n > 0 ? '+' : '−'}${mxn(Math.abs(n))}`;
+/** Resalta los montos ($1,218.90) dentro de una frase, sin tocar el texto. */
+function ConCifras({ texto }: { texto: string }) {
+  const partes = texto.split(/(\$[\d,]+(?:\.\d{2})?)/);
+  return <>{partes.map((parte, i) => (i % 2 === 1 ? <strong key={i}>{parte}</strong> : parte))}</>;
 }
 
-function diferencia(p: Partida): number | null {
-  const real = p.cobradoMXN ?? p.cotizadoMXN;
-  return real === null ? null : real - p.presupuestadoMXN;
-}
-
-function Cifra({ etiqueta, valor, nota }: { etiqueta: string; valor: string; nota?: string }) {
+function Encabezado({ evento, c }: { evento: Evento; c: Cuentas }) {
+  const { titular, entrada } = encabezado(evento, c);
+  const alto = c.vista === 'alto';
   return (
-    <div className="cifra-clave">
-      <dt>{etiqueta}</dt>
-      <dd className="cifra">{valor}</dd>
-      {nota && <p className="cifra-clave__nota">{nota}</p>}
+    <section className={`ev-estado ${alto ? 'ev-estado--alto' : ''}`} aria-labelledby="ev-titular">
+      <p className="ev-ceja">
+        <span>
+          Informe de tu agente · <strong>{evento.nombre}</strong> · {fechaLarga(evento.fecha)}
+        </span>
+        {evento.modoSimulado && <span className="ev-simulado">MODO SIMULADO</span>}
+      </p>
+      <div className="ev-titular">
+        <Icono tipo={alto ? 'altoInvertido' : c.vista === 'borrador' ? 'pendiente' : 'cabe'} grande />
+        <h1 id="ev-titular">{titular}</h1>
+      </div>
+      <p className="ev-entrada">
+        <ConCifras texto={entrada} />
+      </p>
+      {alto && (
+        <p className="ev-sin-cobro">
+          {c.cobrado === 0 && c.cargos === 0
+            ? 'No cobré nada: $0 y 0 cargos.'
+            : `Cobrado hasta ahora: ${mxn(c.cobrado)} en ${c.cargos} ${c.cargos === 1 ? 'cargo' : 'cargos'}.`}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function Medida({ evento, c }: { evento: Evento; c: Cuentas }) {
+  const apoyo = cifrasDeApoyo(evento, c);
+
+  let nota: { icono: TipoIcono; texto: string };
+  if (c.vista === 'borrador') {
+    nota = { icono: 'pendiente', texto: 'Aún no cotizo ni pago nada. La barra está vacía.' };
+  } else if (c.vista === 'alto') {
+    nota =
+      c.rebasaTecho > 0
+        ? { icono: 'alto', texto: `Lo cotizado rebasa el techo por ${mxn(c.rebasaTecho)}. Por eso no pagué.` }
+        : { icono: 'alto', texto: 'Me detuve antes de pagar.' };
+  } else if (c.margenUsado > 0) {
+    nota = {
+      icono: 'margen',
+      texto: `Usé ${mxn(c.margenUsado)} de los ${mxn(c.margenTotal)} del margen (${porcentaje(c.margenUsado / c.margenTotal)}).`,
+    };
+  } else {
+    nota = { icono: 'cabe', texto: `Cupo en tu presupuesto: no toqué el margen de ${mxn(c.margenTotal)}.` };
+  }
+
+  return (
+    <section className="ev-medida" aria-label="Cobrado contra tu techo">
+      <p className="ev-medida__cifra">
+        <b>{mxn(c.cobrado)}</b>{' '}
+        <span>
+          cobrado · tu techo es <strong>{mxn(c.techo)}</strong>
+        </span>
+      </p>
+      <BarraTecho cuentas={c} />
+      <p className="ev-medida__nota">
+        <Icono tipo={nota.icono} />
+        <span>
+          <ConCifras texto={nota.texto} />
+        </span>
+      </p>
+      <dl className="ev-apoyo">
+        {apoyo.map((a) => (
+          <div key={a.etiqueta}>
+            <dt>
+              {a.reglas && <Icono tipo="reglas" />}
+              {a.etiqueta}
+            </dt>
+            <dd>
+              <b>{a.valor}</b>
+              <span>{a.nota}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function Pido({ evento, c }: { evento: Evento; c: Cuentas }) {
+  const lista = salidas(evento, c);
+  return (
+    <section className="ev-pido" aria-labelledby="ev-h-pido">
+      <h2 id="ev-h-pido">Esto necesito de ti</h2>
+      <p>
+        Que decidas cómo seguimos.{' '}
+        {c.cobrado === 0 ? 'Mientras tanto, tu dinero está intacto.' : 'Mientras tanto, no cobro nada más.'}
+        {lista.length > 0 && ' Las salidas posibles:'}
+      </p>
+      {lista.length > 0 && (
+        <ul>
+          {lista.map((s) => (
+            <li key={s.titulo}>
+              <span className="ev-pido__titulo">
+                {s.titulo} <small>Próximamente</small>
+              </span>
+              <span className="ev-pido__nota">{s.nota}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function FilaPartida({ p, c, cambio }: { p: Partida; c: Cuentas; cambio: LoQueCambio | undefined }) {
+  const v = veredicto(p, c);
+  const cobrada = p.cobradoMXN !== null;
+  const monto = p.cobradoMXN ?? p.cotizadoMXN;
+
+  return (
+    <li className="ev-partida">
+      <div className="ev-partida__cab">
+        <div>
+          <p className="ev-partida__nombre">{p.nombre}</p>
+          <p className="ev-partida__comercio">{p.comercio}</p>
+        </div>
+        <p className={`ev-partida__monto ${cobrada ? '' : 'ev-partida__monto--sin'}`}>
+          <small>{cobrada ? 'cobré' : monto !== null ? 'cotizó · no cobré' : 'su tope'}</small>
+          <b>{mxn(monto ?? p.presupuestadoMXN)}</b>
+        </p>
+      </div>
+      <p className={`ev-veredicto ev-veredicto--${v.tono}`}>
+        <strong>{v.palabra}:</strong> {v.cuenta}
+      </p>
+      {cambio?.antes ? (
+        <p className="ev-cambio">
+          Primero coticé {cambio.antes.descripcion} en {cambio.antes.comercio}: {mxn(cambio.antes.montoMXN)}.{' '}
+          {cobrada ? 'Lo cambié por' : 'Probé con'} {cambio.compra}.
+        </p>
+      ) : (
+        cambio?.compra && (
+          <p className="ev-cambio">
+            {cobrada ? 'Compré' : 'Coticé'}: {cambio.compra}.
+          </p>
+        )
+      )}
+      <details className="ev-plegado">
+        <summary>Ver detalle</summary>
+        <dl className="ev-detalle">
+          <dt>Tope de la partida</dt>
+          <dd>{mxn(p.presupuestadoMXN)}</dd>
+          <dt>Cotizado</dt>
+          <dd>{p.cotizadoMXN === null ? 'Sin cotización' : mxn(p.cotizadoMXN)}</dd>
+          <dt>Cobrado</dt>
+          <dd>{p.cobradoMXN === null ? 'Nada' : mxn(p.cobradoMXN)}</dd>
+          <dt>Orden</dt>
+          <dd>{p.orderId ?? 'Sin orden: no se pagó'}</dd>
+          {p.tipoCambio != null && p.tipoCambio !== 1 && (
+            <>
+              <dt>Tipo de cambio</dt>
+              <dd>{p.tipoCambio}</dd>
+            </>
+          )}
+        </dl>
+      </details>
+    </li>
+  );
+}
+
+function Partidas({ evento, c, lectura }: { evento: Evento; c: Cuentas; lectura: LecturaTimeline }) {
+  const lista: Grupo[] = grupos(evento);
+  const n = evento.partidas.length;
+  const titulo = c.vista === 'alto' ? 'Esto intenté pagar' : c.vista === 'borrador' ? 'Las partidas' : 'Esto pagué';
+  const bajada =
+    n === 0
+      ? 'Todavía no armo las partidas de este evento.'
+      : c.vista === 'alto' && c.cobrado === 0
+        ? 'Ninguna partida se cobró. Estas son las opciones más baratas que encontré.'
+        : n === 1 ? 'Una sola partida.' : `${n} partidas, agrupadas por lo que les pasó.`;
+
+  return (
+    <section className="ev-bloque" aria-labelledby="ev-h-partidas">
+      <h2 id="ev-h-partidas">{titulo}</h2>
+      <p>{bajada}</p>
+      {lista.map((g) => (
+        <div className="ev-grupo" key={g.estado}>
+          <h3>
+            <Icono tipo={ICONO_GRUPO[g.estado]} />
+            {g.titulo} <small>{g.resumen}</small>
+          </h3>
+          <ul>
+            {g.indices.map((i) => (
+              <FilaPartida key={i} p={evento.partidas[i]} c={c} cambio={lectura.porPartida.get(i)} />
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function AsiLoHice({ evento, c, lectura }: { evento: Evento; c: Cuentas; lectura: LecturaTimeline }) {
+  const pasos = pasosClave(evento, c, lectura);
+  return (
+    <section className="ev-bloque ev-bloque--lado" aria-labelledby="ev-h-hice">
+      <h2 id="ev-h-hice">{c.vista === 'alto' ? 'Así llegué al alto' : 'Así lo hice'}</h2>
+      {pasos.length === 0 ? (
+        <p>Todavía no hay pasos: el evento está creado, sin ejecutar.</p>
+      ) : (
+        <ol className="ev-pasos">
+          {pasos.map((paso, i) => (
+            <li key={i} className={paso.tipo === 'normal' ? '' : `ev-paso--${paso.tipo}`}>
+              <p>
+                {paso.tipo !== 'normal' && paso.rotulo && <span>{paso.rotulo}</span>}
+                {paso.texto}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+      {nadieIntervino(c) && (
+        <p className="ev-cierre">
+          <Icono tipo="cabe" />
+          Nadie tuvo que intervenir.
+        </p>
+      )}
+      {evento.timeline.length > 0 && (
+        <details className="ev-plegado ev-bitacora">
+          <summary>Ver bitácora completa ({evento.timeline.length} pasos)</summary>
+          <ol>
+            {evento.timeline.map((paso, i) => (
+              <li key={i}>
+                <span className="ev-bitacora__quien">
+                  <time dateTime={paso.hora}>{horaCorta(paso.hora)}</time> ·{' '}
+                  <b className={paso.actor === 'reglas' ? 'ev-c-reglas' : ''}>{ETIQUETA_ACTOR[paso.actor]}</b>
+                </span>
+                <span>{mensajeLegible(paso.mensaje)}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function DatosEvento({ evento, c }: { evento: Evento; c: Cuentas }) {
+  const costo = evento.totales.costoPorAsistenteMXN;
+  // El backend calcula el costo sobre lo cotizado cuando no hubo cobro; solo se dice si la cuenta lo confirma.
+  const sobreCotizado =
+    c.cobrado === 0 && evento.asistentes > 0 && Math.abs(costo - c.cotizado / evento.asistentes) < 0.01;
+  const textoCosto =
+    c.vista === 'borrador'
+      ? 'Sin ejecutar'
+      : c.cobrado > 0
+        ? mxn(costo)
+        : sobreCotizado
+          ? `${mxn(costo)} · sobre lo cotizado, sin cobro`
+          : `${mxn(costo)} · nada cobrado`;
+
+  return (
+    <section className="ev-contexto" aria-labelledby="ev-h-datos">
+      <h2 id="ev-h-datos">Datos del evento</h2>
+      <dl>
+        <dt>Evento</dt>
+        <dd>{evento.nombre}</dd>
+        <dt>Fecha</dt>
+        <dd>{fechaLarga(evento.fecha)}</dd>
+        <dt>Asistentes</dt>
+        <dd>{evento.asistentes}</dd>
+        <dt>Costo por asistente</dt>
+        <dd>{textoCosto}</dd>
+        <dt>Presupuesto</dt>
+        <dd>{mxn(c.presupuesto)}</dd>
+        <dt>Margen permitido</dt>
+        <dd>
+          {porcentaje(evento.margen)} · {mxn(c.margenTotal)}
+        </dd>
+        <dt>Techo</dt>
+        <dd>{mxn(c.techo)}</dd>
+        <dt>Estado</dt>
+        <dd>{ETIQUETA_ESTADO_EVENTO[evento.estado]}</dd>
+        <dt>Pagos</dt>
+        <dd>{evento.modoSimulado ? 'MODO SIMULADO' : 'Reales'}</dd>
+      </dl>
+    </section>
+  );
+}
+
+function Informe({ evento }: { evento: Evento }) {
+  const c = useMemo(() => cuentas(evento), [evento]);
+  const lectura = useMemo(() => leerTimeline(evento.timeline, evento.partidas), [evento]);
+
+  return (
+    <div className="ev-columnas">
+      <div className="ev-principal">
+        <Encabezado evento={evento} c={c} />
+        <Medida evento={evento} c={c} />
+        {c.vista === 'alto' && <Pido evento={evento} c={c} />}
+        <Partidas evento={evento} c={c} lectura={lectura} />
+      </div>
+      <aside className="ev-lado">
+        <AsiLoHice evento={evento} c={c} lectura={lectura} />
+        <DatosEvento evento={evento} c={c} />
+      </aside>
     </div>
   );
 }
 
-function BarraAvance({ evento }: { evento: Evento }) {
-  const { presupuestoMXN: presupuesto, techoMXN: techo, totales } = evento;
-  const hayCobro = totales.cobradoMXN > 0;
-  // Si no se cobró nada, la barra muestra lo cotizado: es lo que el agente frenó.
-  const gasto = hayCobro ? totales.cobradoMXN : totales.cotizadoMXN;
-  const escala = Math.max(techo, gasto);
-  const pct = (n: number) => `${(n / escala) * 100}%`;
-
-  const enPresupuesto = Math.min(gasto, presupuesto);
-  const enMargen = Math.max(0, Math.min(gasto, techo) - presupuesto);
-  const sobreTecho = Math.max(0, gasto - techo);
-  const margenTotal = techo - presupuesto;
-
-  let lectura: string;
-  if (sobreTecho > 0) {
-    lectura = `Lo cotizado rebasa el techo por ${mxn(sobreTecho)}. ${
-      hayCobro ? '' : 'No se cobró nada.'
-    }`;
-  } else if (enMargen > 0) {
-    lectura = `Usó ${mxn(enMargen)} de los ${mxn(margenTotal)} de margen (${porcentaje(
-      enMargen / margenTotal,
-    )}).`;
-  } else {
-    lectura = `Quedó ${mxn(presupuesto - gasto)} abajo del presupuesto. No tocó el margen.`;
-  }
-
+function Regreso() {
   return (
-    <section className="avance" aria-label="Avance del gasto">
-      <div className="avance__encabezado">
-        <h2 className="subtitulo">{hayCobro ? 'Cobrado' : 'Cotizado, sin cobrar'}</h2>
-        <p className="avance__lectura">{lectura}</p>
-      </div>
-      <div
-        className="avance__pista"
-        role="img"
-        aria-label={`${mxn(gasto)} de un presupuesto de ${mxn(presupuesto)} y un techo de ${mxn(techo)}`}
-      >
-        <div className="avance__tramo avance__tramo--presupuesto" style={{ width: pct(enPresupuesto) }} />
-        <div className="avance__tramo avance__tramo--margen" style={{ width: pct(enMargen) }} />
-        <div className="avance__tramo avance__tramo--exceso" style={{ width: pct(sobreTecho) }} />
-        <div className="avance__marca" style={{ left: pct(presupuesto) }} />
-        <div className="avance__marca avance__marca--techo" style={{ left: pct(techo) }} />
-      </div>
-      <div className="avance__escala">
-        <span className="avance__rotulo" style={{ left: pct(presupuesto) }}>
-          Presupuesto <span className="cifra">{mxn(presupuesto)}</span>
-        </span>
-        <span className="avance__rotulo avance__rotulo--techo" style={{ left: pct(techo) }}>
-          Techo <span className="cifra">{mxn(techo)}</span>
-        </span>
-      </div>
-    </section>
-  );
-}
-
-function LibroMovimientos({ evento }: { evento: Evento }) {
-  const { partidas, totales } = evento;
-  const monto = (n: number | null) => (n === null ? '—' : mxn(n));
-  const difTotal =
-    (totales.cobradoMXN > 0 ? totales.cobradoMXN : totales.cotizadoMXN) - totales.presupuestadoMXN;
-
-  return (
-    <section>
-      <h2 className="subtitulo">Libro de movimientos</h2>
-      <div className="libro__marco">
-        <table className="libro">
-          <thead>
-            <tr>
-              <th scope="col">Partida</th>
-              <th scope="col">Comercio</th>
-              <th scope="col" className="num">Presupuestado</th>
-              <th scope="col" className="num">Cotizado</th>
-              <th scope="col" className="num">Cobrado</th>
-              <th scope="col" className="num">Diferencia</th>
-              <th scope="col">Estado</th>
-              <th scope="col">Orden</th>
-            </tr>
-          </thead>
-          <tbody>
-            {partidas.map((p) => {
-              const dif = diferencia(p);
-              return (
-                <tr key={p.nombre} data-estado={p.estado}>
-                  <th scope="row">{p.nombre}</th>
-                  <td className="libro__comercio">{p.comercio}</td>
-                  <td className="num cifra">{mxn(p.presupuestadoMXN)}</td>
-                  <td className="num cifra">{monto(p.cotizadoMXN)}</td>
-                  <td className="num cifra">{monto(p.cobradoMXN)}</td>
-                  <td className="num cifra" data-signo={dif === null ? undefined : Math.sign(dif)}>
-                    {dif === null ? '—' : conSigno(dif)}
-                  </td>
-                  <td>
-                    <span className="estado" data-estado={p.estado}>
-                      {ETIQUETA_ESTADO_PARTIDA[p.estado]}
-                    </span>
-                  </td>
-                  <td className="cifra libro__orden">{p.orderId ?? '—'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr>
-              <th scope="row" colSpan={2}>
-                Total
-              </th>
-              <td className="num cifra">{mxn(totales.presupuestadoMXN)}</td>
-              <td className="num cifra">{mxn(totales.cotizadoMXN)}</td>
-              <td className="num cifra">{mxn(totales.cobradoMXN)}</td>
-              <td className="num cifra" data-signo={Math.sign(difTotal)}>
-                {conSigno(difTotal)}
-              </td>
-              <td colSpan={2} />
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function LineaTiempo({ evento }: { evento: Evento }) {
-  return (
-    <section>
-      <h2 className="subtitulo">Línea de tiempo</h2>
-      <ol className="tiempo">
-        {evento.timeline.map((paso, i) => (
-          <li key={i} className="tiempo__paso" data-actor={paso.actor}>
-            <time className="cifra tiempo__hora" dateTime={paso.hora}>
-              {horaCorta(paso.hora)}
-            </time>
-            <span className="tiempo__actor">{ETIQUETA_ACTOR[paso.actor]}</span>
-            <span className="tiempo__mensaje">{mensajeLegible(paso.mensaje)}</span>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-function Contador({ evento }: { evento: Evento }) {
-  const cuenta = (actor: Actor) => evento.timeline.filter((p) => p.actor === actor).length;
-  const agente = cuenta('agente');
-  const reglas = cuenta('reglas');
-  const humano = cuenta('humano');
-
-  return (
-    <section>
-      <h2 className="subtitulo">Quién hizo qué</h2>
-      <dl className="contador">
-        <div className="contador__fila contador__fila--principal">
-          <dt>Acciones del agente</dt>
-          <dd className="cifra">{agente}</dd>
-        </div>
-        <div className="contador__fila contador__fila--principal">
-          <dt>Acciones humanas</dt>
-          <dd className="cifra">{humano}</dd>
-        </div>
-        <div className="contador__fila">
-          <dt>Validaciones del motor de reglas</dt>
-          <dd className="cifra">{reglas}</dd>
-        </div>
-      </dl>
-    </section>
+    <a href="#/" className="ev-regreso">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M14.5 5.5L8 12l6.5 6.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      Eventos
+    </a>
   );
 }
 
@@ -224,74 +374,49 @@ export function PantallaEvento({ id }: { id: string }) {
 
   if (error) {
     return (
-      <p className="aviso aviso--error" role="alert">
-        No se pudo leer el evento {id}: {error} <a href="#/">Volver a la lista</a>
-      </p>
+      <div className="ev-raiz">
+        <Regreso />
+        <p className="ev-aviso ev-aviso--error" role="alert">
+          <Icono tipo="alto" />
+          <span>
+            No pude leer el evento {id}: {error}
+          </span>
+        </p>
+      </div>
     );
   }
-  if (!lectura) return <p className="vacio">Cargando evento…</p>;
+  if (!lectura) {
+    return (
+      <div className="ev-raiz">
+        <p className="ev-aviso" role="status">
+          Cargando evento…
+        </p>
+      </div>
+    );
+  }
 
   const sinConexion = lectura.origen === 'ejemplo';
   const evento = lectura.datos;
   if (evento === null) {
     return (
-      <>
+      <div className="ev-raiz">
+        <Regreso />
         {sinConexion && <AvisoSinConexion />}
-        <p className="vacio">
-          {sinConexion ? `El evento ${id} no está entre los datos de ejemplo.` : `No existe el evento ${id}.`}{' '}
-          <a href="#/">Volver a la lista</a>
+        <p className="ev-aviso">
+          <Icono tipo="noLograda" />
+          <span>
+            {sinConexion ? `El evento ${id} no está entre los datos de ejemplo.` : `No existe el evento ${id}.`}
+          </span>
         </p>
-      </>
+      </div>
     );
   }
 
-  const { totales } = evento;
-  const hayCobro = totales.cobradoMXN > 0;
-
   return (
-    <article className="evento">
-      <a href="#/" className="regreso">
-        ← Eventos
-      </a>
+    <article className="ev-raiz">
+      <Regreso />
       {sinConexion && <AvisoSinConexion />}
-      <header className="evento__encabezado">
-        <div>
-          <h1 className="titulo">{evento.nombre}</h1>
-          <p className="evento__datos">
-            {fechaLarga(evento.fecha)} · {evento.asistentes} asistentes
-          </p>
-        </div>
-        <span className="estado estado--evento" data-estado={evento.estado}>
-          {ETIQUETA_ESTADO_EVENTO[evento.estado]}
-        </span>
-      </header>
-
-      <dl className="cifras">
-        <Cifra etiqueta="Presupuesto" valor={mxn(evento.presupuestoMXN)} />
-        <Cifra
-          etiqueta="Techo"
-          valor={mxn(evento.techoMXN)}
-          nota={`Presupuesto + ${porcentaje(evento.margen)} de margen`}
-        />
-        <Cifra
-          etiqueta="Total cobrado"
-          valor={mxn(totales.cobradoMXN)}
-          nota={hayCobro ? undefined : `Cotizado: ${mxn(totales.cotizadoMXN)}`}
-        />
-        <Cifra
-          etiqueta="Costo por asistente"
-          valor={mxn(totales.costoPorAsistenteMXN)}
-          nota={hayCobro ? undefined : 'Sobre lo cotizado'}
-        />
-      </dl>
-
-      <BarraAvance evento={evento} />
-      <LibroMovimientos evento={evento} />
-
-      <div className="evento__pie">
-        <LineaTiempo evento={evento} />
-        <Contador evento={evento} />
-      </div>
+      <Informe evento={evento} />
     </article>
   );
 }
