@@ -447,5 +447,7 @@ export async function invocar(ctx: Ctx, h: Herramienta, evento: Evento | null, a
       ll.llamadas += 1;
     }
   }
-  return h.handler(ctx, evento as Evento, args);
+  const r = await h.handler(ctx, evento as Evento, args);
+  if (evento && h.cuentaLlamada && r && typeof r === 'object') return { ...r, llamadas_restantes: MAX_LLAMADAS - estadoAgente(ctx.store.interno(evento.id)).llamadas };
+  return r;
 }
