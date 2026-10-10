@@ -1,12 +1,24 @@
-const pesos = new Intl.NumberFormat('es-MX', {
+const pesosEnteros = new Intl.NumberFormat('es-MX', {
   style: 'currency',
   currency: 'MXN',
-  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+const pesosConCentavos = new Intl.NumberFormat('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+  minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
 
+// Sin centavos cuando el monto es entero; con dos decimales cuando no ($6,718.90, nunca $6,718.9).
 export function mxn(n: number): string {
-  return pesos.format(n);
+  return (Number.isInteger(n) ? pesosEnteros : pesosConCentavos).format(n);
+}
+
+// El backend escribe los montos de la línea de tiempo en crudo ("6718.9 MXN"); aquí solo se les da formato.
+export function mensajeLegible(mensaje: string): string {
+  return mensaje.replace(/(\d+(?:\.\d+)?) MXN/g, (_, monto: string) => mxn(Number(monto)));
 }
 
 export function porcentaje(fraccion: number): string {

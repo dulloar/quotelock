@@ -6,6 +6,7 @@ import {
   ETIQUETA_ESTADO_PARTIDA,
   fechaLarga,
   horaCorta,
+  mensajeLegible,
   mxn,
   porcentaje,
 } from '../formato';
@@ -170,7 +171,7 @@ function LineaTiempo({ evento }: { evento: Evento }) {
               {horaCorta(paso.hora)}
             </time>
             <span className="tiempo__actor">{ETIQUETA_ACTOR[paso.actor]}</span>
-            <span className="tiempo__mensaje">{paso.mensaje}</span>
+            <span className="tiempo__mensaje">{mensajeLegible(paso.mensaje)}</span>
           </li>
         ))}
       </ol>
