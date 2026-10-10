@@ -1,4 +1,5 @@
 import type { Evento } from './tipos.ts';
+import type { PartidaPlan } from './plan.ts';
 
 // Estado interno que NO se serializa al front.
 export interface Interno {
@@ -8,6 +9,8 @@ export interface Interno {
   hayReplan: boolean;
   ultimaRonda: number;
   refrescando: boolean;
+  // plan armado en ejecutar (para recotizar en reintentar)
+  plan?: PartidaPlan[];
 }
 
 export class Store {

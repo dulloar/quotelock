@@ -4,7 +4,7 @@ import { redondear } from './tipos.ts';
 import { Store } from './store.ts';
 import { validarBrief } from './validacion.ts';
 import type { Deps } from './orquestador.ts';
-import { ejecutar, refrescar } from './orquestador.ts';
+import { ejecutar, refrescar, reintentar } from './orquestador.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -72,7 +72,7 @@ export function crearServidor(deps: Deps, store: Store = new Store()): http.Serv
         return enviar(res, 201, evento);
       }
 
-      const m = ruta.match(/^\/api\/eventos\/([^/]+)(\/ejecutar)?$/);
+      const m = ruta.match(/^\/api\/eventos\/([^/]+)(\/ejecutar|\/reintentar)?$/);
       if (m) {
         const evento = store.obtener(m[1]);
         if (!evento) return enviar(res, 404, { error: 'Evento no encontrado' });
@@ -80,7 +80,11 @@ export function crearServidor(deps: Deps, store: Store = new Store()): http.Serv
           await refrescar(deps, evento, store.interno(evento.id));
           return enviar(res, 200, evento);
         }
-        if (m[2] && metodo === 'POST') {
+        if (m[2] === '/reintentar' && metodo === 'POST') {
+          const r = await reintentar(deps, evento, store.interno(evento.id));
+          return r.ok ? enviar(res, 200, r.evento) : enviar(res, 409, { error: r.error });
+        }
+        if (m[2] === '/ejecutar' && metodo === 'POST') {
           await ejecutar(deps, evento, store.interno(evento.id));
           return enviar(res, 200, evento);
         }
