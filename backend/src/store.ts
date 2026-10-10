@@ -10,6 +10,8 @@ export interface Interno {
   ultimaRonda: number;
   refrescando: boolean;
   // plan armado en ejecutar (para recotizar en reintentar)
+  // partidas (por índice) sin cotización posible -> motivo; no bloquean el cierre del evento
+  sinCotizacion: Record<number, string>;
   plan?: PartidaPlan[];
 }
 
@@ -24,7 +26,7 @@ export class Store {
   }
   guardar(e: Evento): void {
     this.eventos.set(e.id, e);
-    if (!this.internos.has(e.id)) this.internos.set(e.id, { ejecutando: false, checkouts: {}, hayReplan: false, ultimaRonda: 0, refrescando: false });
+    if (!this.internos.has(e.id)) this.internos.set(e.id, { ejecutando: false, checkouts: {}, hayReplan: false, ultimaRonda: 0, refrescando: false, sinCotizacion: {} });
   }
   obtener(id: string): Evento | undefined {
     return this.eventos.get(id);

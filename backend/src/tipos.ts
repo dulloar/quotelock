@@ -27,6 +27,7 @@ export interface Partida {
   checkoutId: string | null;
   urlAprobacion: string | null;
   aprobacionExpira: string | null;
+  motivo?: string | null;
 }
 
 export interface EntradaTimeline {

@@ -41,3 +41,8 @@ curl -s -XPOST localhost:3001/api/eventos/evt_1/ejecutar
 - `aprobacion` (default): búsqueda y cotización reales; `POST /api/eventos/:id/ejecutar` crea un checkout real por partida (sin `X-Simulate-Checkout`) y no espera: evento y partidas quedan `por_aprobar` con `urlAprobacion`, `aprobacionExpira` (15 min) y `checkoutId`. Una persona aprueba en esa URL de Reap.
 - `GET /api/eventos/:id` consulta en Reap los checkouts pendientes (máx. una ronda cada 2 s): `PROCESSING` -> partida `aprobado`, `COMPLETED` -> `pagado`, `FAILED`/`EXPIRED` -> `no_lograda`. Sin pendientes: `revision_humana` si alguna falló; si no, `ajustado` o `pagado`.
 - `simulado`: cotización real, pago local (`orderId` `sim_...`), evento `pagado` con `modoSimulado: true`. El evento incluye `modoPago`.
+
+## Robustez
+- `ReapReal` reintenta búsqueda y cotización ante 503/429/red (1 s, 2 s, 4 s; respeta `Retry-After`, tope 5 s) con la misma Idempotency-Key; los checkouts no se reintentan.
+- Si faltan existencias (`VARIANT_UNAVAILABLE`, `QUOTE_UNFULFILLABLE`, `AGENTIC_REQUEST_REJECTED`) la cantidad se reduce a la mitad hasta 4 veces; el timeline lo registra.
+- Una partida sin cotización queda `no_lograda` y el evento sigue (termina `ajustado`); solo va a `revision_humana` si rebasa el techo, falla un cargo o nada cotiza.
