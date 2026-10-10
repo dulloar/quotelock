@@ -60,6 +60,32 @@ interface Elegida {
   replaneada: boolean;
 }
 
+const CODIGOS_EXISTENCIAS = ['VARIANT_UNAVAILABLE', 'QUOTE_UNFULFILLABLE', 'AGENTIC_REQUEST_REJECTED'];
+
+// Cotiza un ítem; si faltan existencias reintenta con la mitad de la cantidad (hasta 4 veces o cantidad 1).
+function crearCotizador(deps: Deps, log: (a: Actor, m: string) => void, verbo: string, actorFallo: Actor) {
+  return async (item: ItemPlan): Promise<Elegida | null> => {
+    let cantidad = item.cantidad;
+    for (let intento = 0; ; intento++) {
+      try {
+        const cot = await deps.reap.cotizar({ comercio: item.comercio, productoId: item.productoId, query: item.query, cantidad });
+        const { montoMXN, tipoCambio } = aMXN(cot.finalAmount, cot.moneda, deps.fx);
+        const ajustada = cantidad < item.cantidad;
+        if (ajustada) log('agente', `Solo hay existencias para ${cantidad} de ${item.cantidad} en ${item.comercio}; ajustó la cantidad`);
+        return { item, cot, mxn: montoMXN, tc: tipoCambio, replaneada: ajustada };
+      } catch (e) {
+        const code = e instanceof ReapError ? e.code : 'ERROR';
+        if (CODIGOS_EXISTENCIAS.includes(code) && cantidad > 1 && intento < 4) {
+          cantidad = Math.ceil(cantidad / 2);
+          continue;
+        }
+        log(actorFallo, `No se pudo ${verbo} ${item.descripcion} en ${item.comercio} (${code})`);
+        return null;
+      }
+    }
+  };
+}
+
 export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Promise<Evento> {
   // Idempotencia: un evento ya ejecutado (o en curso) no se vuelve a cobrar.
   if (evento.estado !== 'borrador' || interno.ejecutando) return evento;
@@ -78,17 +104,7 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
       checkoutId: null, urlAprobacion: null, aprobacionExpira: null,
     }));
 
-    const cotizar = async (item: ItemPlan): Promise<Elegida | null> => {
-      try {
-        const cot = await deps.reap.cotizar({ comercio: item.comercio, productoId: item.productoId, query: item.query, cantidad: item.cantidad });
-        const { montoMXN, tipoCambio } = aMXN(cot.finalAmount, cot.moneda, deps.fx);
-        return { item, cot, mxn: montoMXN, tc: tipoCambio, replaneada: false };
-      } catch (e) {
-        const code = e instanceof ReapError ? e.code : 'ERROR';
-        log('agente', `No se pudo cotizar ${item.descripcion} en ${item.comercio} (${code})`);
-        return null;
-      }
-    };
+    const cotizar = crearCotizador(deps, log, 'cotizar', 'agente');
 
     // 2. Cotizar y replanear
     for (let i = 0; i < plan.length; i++) {
@@ -118,12 +134,16 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
         part.tipoCambio = el.tc;
       } else {
         part.estado = 'no_lograda';
+        part.motivo = 'Sin existencias o sin cotización';
+        interno.sinCotizacion[i] = part.motivo;
+        log('agente', `No se logró ${pp.nombre}: sin existencias o sin cotización; el plan sigue sin ella`);
       }
     }
 
     // 3. Validar el plan completo ANTES de pagar
     const total = redondear(elegidas.reduce((s, e) => s + (e?.mxn ?? 0), 0));
     const hayReplan = elegidas.some((e) => e?.replaneada);
+    const haySinCot = elegidas.some((e) => e === null);
     interno.hayReplan = hayReplan;
     evento.totales.cotizadoMXN = total;
     const verTecho = reglaTecho(total, evento.presupuestoMXN, evento.margen);
@@ -135,18 +155,19 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
       log('reglas', `${motivo}. No se creó ningún checkout; el evento pasa a revisión humana`);
     };
 
-    if (elegidas.some((e) => e === null)) {
-      detener('Hay partidas sin cotización posible');
+    if (elegidas.every((e) => e === null)) {
+      detener('Ninguna partida se pudo cotizar');
     } else if (!verTecho.ok) {
       detener('El total rebasa el techo aun con las alternativas más baratas');
     } else {
       // 4. Pagar
       let fallo = false;
+      let fallaCheckout = false;
       for (let i = 0; i < plan.length; i++) {
-        const el = elegidas[i]!;
+        const el = elegidas[i];
         const part = evento.partidas[i];
-        if (fallo && part.estado === 'no_lograda') continue;
-        if (fallo && evento.partidas.some((x) => x.estado === 'no_lograda')) {
+        if (!el) continue;
+        if (fallo && fallaCheckout) {
           // Un checkout ya falló: no se siguen creando cobros hasta que una persona revise.
           part.estado = 'bloqueado';
           log('reglas', `Pago de ${part.nombre} detenido: un checkout anterior no se completó`);
@@ -177,7 +198,9 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
           log('agente', `Pagó ${part.nombre} en ${part.comercio}: ${cobrado} MXN (orden ${r.checkout.orderId})`);
         } else {
           fallo = true;
+          fallaCheckout = true;
           part.estado = 'no_lograda';
+          part.motivo = `Checkout ${r.checkout.status}`;
           log('agente', `Checkout de ${part.nombre} terminó en ${r.checkout.status}`);
         }
       }
@@ -187,7 +210,7 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
       } else if (fallo) {
         evento.estado = 'revision_humana';
         log('reglas', 'Alguna partida no se pudo pagar; el evento pasa a revisión humana');
-      } else if (hayReplan || total > evento.presupuestoMXN) {
+      } else if (hayReplan || haySinCot || total > evento.presupuestoMXN) {
         evento.estado = 'ajustado';
       } else {
         evento.estado = 'pagado';
@@ -215,16 +238,7 @@ export async function reintentar(deps: Deps, evento: Evento, interno: Interno): 
   const plan = interno.plan;
   const log = (actor: Actor, mensaje: string) => evento.timeline.push({ hora: deps.ahora().toISOString(), actor, mensaje });
   try {
-    const cotizar = async (item: ItemPlan): Promise<Elegida | null> => {
-      try {
-        const cot = await deps.reap.cotizar({ comercio: item.comercio, productoId: item.productoId, query: item.query, cantidad: item.cantidad });
-        const { montoMXN, tipoCambio } = aMXN(cot.finalAmount, cot.moneda, deps.fx);
-        return { item, cot, mxn: montoMXN, tc: tipoCambio, replaneada: false };
-      } catch (e) {
-        log('reglas', `No se pudo recotizar ${item.descripcion} en ${item.comercio} (${e instanceof ReapError ? e.code : 'ERROR'})`);
-        return null;
-      }
-    };
+    const cotizar = crearCotizador(deps, log, 'recotizar', 'reglas');
     const elegidas = new Map<number, Elegida>();
     for (const i of fallidas) {
       const pp: PartidaPlan = plan[i];
@@ -241,10 +255,17 @@ export async function reintentar(deps: Deps, evento: Evento, interno: Interno): 
         if (mejor && (!el || mejor.mxn < el.mxn)) el = mejor;
       }
       if (!el) {
-        log('reglas', `No se pudo recotizar ${pp.nombre}; no se creó ningún checkout y el evento sigue en revisión humana`);
-        return { ok: true, evento };
+        log('agente', `No se logró ${pp.nombre}: sin existencias o sin cotización; el plan sigue sin ella`);
+        evento.partidas[i].estado = 'no_lograda';
+        evento.partidas[i].motivo = 'Sin existencias o sin cotización';
+        interno.sinCotizacion[i] = evento.partidas[i].motivo!;
+        continue;
       }
       elegidas.set(i, el);
+    }
+    if (elegidas.size === 0) {
+      log('reglas', 'No se pudo recotizar ninguna partida; no se creó ningún checkout');
+      return { ok: true, evento };
     }
     // Total real del plan: cobrado (aprobado/pagado) + cotizado (por_aprobar) + nuevas cotizaciones.
     let total = 0;
@@ -262,7 +283,9 @@ export async function reintentar(deps: Deps, evento: Evento, interno: Interno): 
       return { ok: true, evento };
     }
     for (const i of fallidas) {
-      const el = elegidas.get(i)!;
+      const el = elegidas.get(i);
+      if (!el) continue;
+      delete interno.sinCotizacion[i];
       const part = evento.partidas[i];
       const r = await pagar(deps, {
         presupuestoMXN: evento.presupuestoMXN, margen: evento.margen, cotizacion: el.cot,
@@ -295,14 +318,15 @@ export async function reintentar(deps: Deps, evento: Evento, interno: Interno): 
         log('agente', `Recotizó ${part.nombre} en ${el.cot.comercio} por ${el.mxn} MXN y la pagó (orden ${r.checkout.orderId})`);
       } else {
         part.estado = 'no_lograda';
+        part.motivo = `Checkout ${r.checkout.status}`;
         log('agente', `El checkout nuevo de ${part.nombre} terminó en ${r.checkout.status}`);
       }
     }
     evento.totales.cotizadoMXN = redondear(evento.partidas.reduce((s, p) => s + (p.estado === 'bloqueado' || p.estado === 'no_lograda' ? 0 : (p.cotizadoMXN ?? p.cobradoMXN ?? 0)), 0));
     evento.totales.cobradoMXN = redondear(evento.partidas.reduce((s, p) => s + (p.cobradoMXN ?? 0), 0));
     if (evento.partidas.some((p) => p.estado === 'por_aprobar')) evento.estado = 'por_aprobar';
-    else if (evento.partidas.some((p) => p.estado === 'no_lograda' || p.estado === 'bloqueado')) evento.estado = 'revision_humana';
-    else if (interno.hayReplan || evento.totales.cotizadoMXN > evento.presupuestoMXN) evento.estado = 'ajustado';
+    else if (evento.partidas.some((p, i) => (p.estado === 'no_lograda' && !(i in interno.sinCotizacion)) || p.estado === 'bloqueado')) evento.estado = 'revision_humana';
+    else if (interno.hayReplan || Object.keys(interno.sinCotizacion).length > 0 || evento.totales.cotizadoMXN > evento.presupuestoMXN) evento.estado = 'ajustado';
     else evento.estado = 'pagado';
     const base = evento.totales.cobradoMXN > 0 ? evento.totales.cobradoMXN : evento.totales.cotizadoMXN;
     evento.totales.costoPorAsistenteMXN = redondear(base / evento.asistentes);
@@ -342,6 +366,7 @@ export async function refrescar(deps: Deps, evento: Evento, interno: Interno): P
         log('humano', `Aprobó el cargo de ${part.nombre} en Reap (${cobrado} MXN, orden ${c.orderId})`);
       } else if (c.status === 'FAILED' || c.status === 'EXPIRED') {
         part.estado = 'no_lograda';
+        part.motivo = `Checkout ${c.status}`;
         // El checkout ya no está activo: se reemplaza REQUIRES_ACTION por el estado terminal (permite reintentar).
         const prev = interno.checkouts[i] ?? [];
         const k = prev.lastIndexOf('REQUIRES_ACTION');
@@ -353,8 +378,8 @@ export async function refrescar(deps: Deps, evento: Evento, interno: Interno): P
     }
     evento.totales.cobradoMXN = redondear(evento.partidas.reduce((s, p) => s + (p.cobradoMXN ?? 0), 0));
     if (evento.partidas.some((p) => p.estado === 'por_aprobar')) evento.estado = 'por_aprobar';
-    else if (evento.partidas.some((p) => p.estado === 'no_lograda')) evento.estado = 'revision_humana';
-    else if (interno.hayReplan || evento.totales.cotizadoMXN > evento.presupuestoMXN) evento.estado = 'ajustado';
+    else if (evento.partidas.some((p, i) => p.estado === 'no_lograda' && !(i in interno.sinCotizacion))) evento.estado = 'revision_humana';
+    else if (interno.hayReplan || Object.keys(interno.sinCotizacion).length > 0 || evento.totales.cotizadoMXN > evento.presupuestoMXN) evento.estado = 'ajustado';
     else evento.estado = 'pagado';
     const base = evento.totales.cobradoMXN > 0 ? evento.totales.cobradoMXN : evento.totales.cotizadoMXN;
     evento.totales.costoPorAsistenteMXN = redondear(base / evento.asistentes);

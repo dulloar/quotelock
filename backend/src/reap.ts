@@ -105,6 +105,7 @@ export interface ConfigReal {
   modoPago?: 'aprobacion' | 'simulado';
   pollMs?: number;
   pollMaxMs?: number;
+  espera?: (ms: number) => Promise<void>;
 }
 
 export function mapearError(status: number, cuerpo: unknown, retryAfter: number | null): ReapError {
@@ -199,15 +200,36 @@ export class ReapReal implements ReapClient {
     this.cfg = cfg;
     this.modoPago = cfg.modoPago ?? 'aprobacion';
   }
-  async llamar(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown, extra: Record<string, string> = {}): Promise<any> {
+  // Con reintentar=true, los fallos pasajeros (503/429/red) se repiten hasta 3 veces (1 s, 2 s, 4 s; tope 5 s o Retry-After).
+  // Los headers (incluida la Idempotency-Key) se reutilizan tal cual en los reintentos.
+  async llamar(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown, extra: Record<string, string> = {}, reintentar = false): Promise<any> {
+    const espera = this.cfg.espera ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    for (let intento = 0; ; intento++) {
+      try {
+        return await this.llamarUnaVez(metodo, ruta, cuerpo, extra);
+      } catch (e) {
+        const pasajero = e instanceof ReapError && (['AGENTIC_SERVICE_UNAVAILABLE', 'QUOTE_TEMPORARILY_UNAVAILABLE', 'NETWORK_ERROR'].includes(e.code) || e.status === 503 || e.status === 429);
+        if (!reintentar || !pasajero || intento >= 3) throw e;
+        const ra = (e as ReapError).retryAfter;
+        await espera(Math.min(5000, ra != null ? ra * 1000 : 1000 * 2 ** intento));
+      }
+    }
+  }
+  async llamarUnaVez(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown, extra: Record<string, string> = {}): Promise<any> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.cfg.apiKey}`,
       'Reap-Version': this.cfg.version,
       ...extra,
     };
     if (metodo === 'POST') headers['Content-Type'] = 'application/json';
-    const res = await fetch(this.cfg.baseUrl + ruta, { method: metodo, headers, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
-    const texto = await res.text();
+    let res: Response;
+    let texto: string;
+    try {
+      res = await fetch(this.cfg.baseUrl + ruta, { method: metodo, headers, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
+      texto = await res.text();
+    } catch (e) {
+      throw new ReapError('NETWORK_ERROR', `Error de red hacia Reap: ${(e as Error)?.message ?? e}`, 0);
+    }
     let json: unknown = null;
     try { json = texto ? JSON.parse(texto) : null; } catch { json = null; }
     if (!res.ok) {
@@ -225,7 +247,7 @@ export class ReapReal implements ReapClient {
       merchantPreference: { mode: 'ONLY', merchantName: nombre },
       context: { country: 'MX', currency: 'MXN' },
       pagination: { limit: 10 },
-    });
+    }, {}, true);
     const lista = candidatos(busqueda?.products ?? [], s.comercio).slice(0, 3);
     if (lista.length === 0) throw new ReapError('QUOTE_UNFULFILLABLE', `Sin productos disponibles y permitidos para "${s.query}" en ${nombre}`, 400);
     let q: any = null;
@@ -233,6 +255,7 @@ export class ReapReal implements ReapClient {
     let ultimo: unknown = null;
     // Si la variante más barata no alcanza en stock, se prueba la siguiente (máx. 3 cotizaciones).
     for (const c of lista) {
+      const llave = crypto.randomUUID(); // misma llave en los reintentos de este intento
       try {
         q = await this.llamar(
           'POST',
@@ -245,7 +268,8 @@ export class ReapReal implements ReapClient {
               addressLine1: 'Av. Paseo de la Reforma 222', city: 'Ciudad de México', region: 'CDMX', postalCode: '06600', country: 'MX',
             },
           },
-          { 'Idempotency-Key': crypto.randomUUID() },
+          { 'Idempotency-Key': llave },
+          true,
         );
         cand = c;
         break;
@@ -258,7 +282,7 @@ export class ReapReal implements ReapClient {
     // Normalmente ya viene una opción seleccionada; solo se llama a shipping-option si no.
     const opciones: any[] = q.shippingOptions ?? [];
     if (opciones.length > 0 && !opciones.some((o) => o.selected))
-      q = await this.llamar('POST', `/agentic/quotes/${q.id}/shipping-option`, { shippingOptionId: opciones[0].id });
+      q = await this.llamar('POST', `/agentic/quotes/${q.id}/shipping-option`, { shippingOptionId: opciones[0].id }, {}, true);
     return parsearCotizacion(q, s, cand);
   }
   async crearCheckout(q: Cotizacion): Promise<Checkout> {
