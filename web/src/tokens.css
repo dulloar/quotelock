@@ -48,4 +48,8 @@
   --radio: 14px;
   --radio-chico: 8px;
   --ancho-pagina: 1080px;
+  /* columna cómoda para leer y llenar formularios */
+  --ancho-lectura: 38rem;
+  /* lado mínimo de una zona táctil (44 px) */
+  --toque: 2.75rem;
 }
