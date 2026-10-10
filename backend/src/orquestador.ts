@@ -93,7 +93,7 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
           const a = await cotizar(alt);
           if (!a) continue;
           a.replaneada = true;
-          mejor = a;
+          if (!mejor || a.mxn < mejor.mxn) mejor = a;
           if (a.mxn <= pp.presupuestadoMXN) break;
         }
         if (mejor && (!el || mejor.mxn < el.mxn)) {
