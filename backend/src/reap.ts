@@ -1,4 +1,6 @@
 import { CATALOGO, ENVIO } from './catalogo.ts';
+import { COMERCIOS } from './comercios.ts';
+import { reglaComercio } from './reglas.ts';
 
 export interface SolicitudCotizacion {
   comercio: string;
@@ -89,7 +91,7 @@ export class ReapSimulado implements ReapClient {
 }
 
 // -------------------------------------------------------------------- Real
-// SIN PROBAR contra el sandbox (aún no hay API key). Implementado según docs/03.
+// Probado contra el sandbox real (búsqueda y cotización); formas de respuesta en test/reap.test.ts.
 const FINALES = ['COMPLETED', 'FAILED', 'EXPIRED'];
 
 export interface ConfigReal {
@@ -114,9 +116,76 @@ export function mapearError(status: number, cuerpo: unknown, retryAfter: number 
     MERCHANT_NOT_RESOLVED: 'Comercio no reconocido',
     AGENTIC_PAYMENTS_NOT_ENABLED: 'El proyecto no tiene el módulo agentic activo',
     ENROLLMENT_NOT_ACTIVE: 'Enrollment no activo: rehacerlo',
+    VALIDATION_FAILED: 'Solicitud inválida para Reap (422)',
     RATE_LIMIT_EXCEEDED: 'Límite de consultas excedido',
   };
   return new ReapError(code, acciones[code] ?? e?.message ?? `Error de Reap (HTTP ${status})`, status, retryAfter);
+}
+
+export interface Monto {
+  amount: number;
+  currency: string;
+}
+
+// Los montos de Reap son objetos {amount, currency}; acepta también números sueltos.
+export function parsearMonto(x: unknown, monedaPorDefecto = 'MXN'): Monto | null {
+  if (x == null) return null;
+  if (typeof x === 'number' || typeof x === 'string') {
+    const n = Number(x);
+    return Number.isFinite(n) ? { amount: n, currency: monedaPorDefecto } : null;
+  }
+  const o = x as { amount?: unknown; currency?: unknown };
+  const n = Number(o.amount);
+  if (!Number.isFinite(n)) return null;
+  return { amount: n, currency: String(o.currency ?? monedaPorDefecto) };
+}
+
+export interface ProductoReap {
+  id: string;
+  name: string;
+  available?: boolean;
+  priceRange?: { min?: unknown; max?: unknown };
+  previewVariant?: { id: string; name?: string; price?: unknown; available?: boolean };
+}
+
+export interface Candidato {
+  producto: ProductoReap;
+  variantId: string;
+  precio: Monto;
+}
+
+// Elige el producto disponible más barato que pase las reglas (categorías prohibidas).
+export function elegirProducto(productos: ProductoReap[], comercio: string): Candidato | null {
+  return candidatos(productos, comercio)[0] ?? null;
+}
+
+// Candidatos válidos ordenados de más barato a más caro.
+export function candidatos(productos: ProductoReap[], comercio: string): Candidato[] {
+  const lista: Candidato[] = [];
+  for (const p of productos ?? []) {
+    const v = p.previewVariant;
+    if (!v?.id || p.available === false || v.available === false) continue;
+    if (!reglaComercio(comercio, 'MX', p.name ?? '').ok) continue;
+    const precio = parsearMonto(v.price) ?? parsearMonto(p.priceRange?.min);
+    if (!precio) continue;
+    lista.push({ producto: p, variantId: v.id, precio });
+  }
+  return lista.sort((a, b) => a.precio.amount - b.precio.amount);
+}
+
+export function parsearCotizacion(q: any, s: SolicitudCotizacion, cand: Candidato): Cotizacion {
+  const fa = parsearMonto(q?.amountBreakdown?.finalAmount, cand.precio.currency);
+  if (!q?.id || !fa) throw new ReapError('AGENTIC_REQUEST_REJECTED', 'Cotización de Reap sin id o finalAmount', 502);
+  return {
+    id: q.id, comercio: s.comercio, productoId: cand.producto.id, nombreProducto: String(cand.producto.name ?? s.query),
+    cantidad: s.cantidad, moneda: fa.currency, finalAmount: fa.amount, expiresAt: q.expiresAt, paisEnvio: 'MX',
+  };
+}
+
+export function mapearCheckoutReap(c: any, monedaPorDefecto = 'MXN'): Checkout {
+  // POST devuelve `amount`; GET devuelve `finalAmount`.
+  const m = parsearMonto(c?.finalAmount ?? c?.amount, monedaPorDefecto);
+  return { id: c.id, status: c.status, orderId: c.orderId ?? null, finalAmount: m ? m.amount : null, moneda: m?.currency ?? monedaPorDefecto };
 }
 
 export class ReapReal implements ReapClient {
@@ -142,42 +211,50 @@ export class ReapReal implements ReapClient {
     }
     return json;
   }
+  // Una búsqueda + una cotización por llamada (rate limit 150/min).
   async cotizar(s: SolicitudCotizacion): Promise<Cotizacion> {
+    const nombre = COMERCIOS[s.comercio]?.nombre;
+    if (!nombre) throw new ReapError('MERCHANT_NOT_RESOLVED', `Comercio ${s.comercio} sin nombre verificado para búsqueda`, 400);
     const busqueda = await this.llamar('POST', '/agentic/products/search', {
       query: s.query,
-      merchantPreference: { mode: 'ONLY', merchantName: s.comercio },
+      merchantPreference: { mode: 'ONLY', merchantName: nombre },
       context: { country: 'MX', currency: 'MXN' },
-      filters: { availability: 'AVAILABLE_ONLY' },
-      pagination: { limit: 5 },
+      pagination: { limit: 10 },
     });
-    const prod = busqueda?.products?.[0];
-    const variante = prod?.previewVariant;
-    if (!variante) throw new ReapError('QUOTE_UNFULFILLABLE', `Sin productos para "${s.query}" en ${s.comercio}`, 400);
-    let q = await this.llamar(
-      'POST',
-      '/agentic/quotes',
-      {
-        email: this.cfg.email,
-        items: [{ variantId: variante.id, quantity: s.cantidad }],
-        shippingAddress: {
-          firstName: 'Evento', lastName: 'QuoteLock', phone: '+525512345678',
-          addressLine1: 'Av. Reforma 1', city: 'Ciudad de Mexico', region: 'CDMX', postalCode: '06600', country: 'MX',
-        },
-      },
-      { 'Idempotency-Key': crypto.randomUUID() },
-    );
-    const opcion = q.shippingOptions?.find((o: any) => o.selected) ?? q.shippingOptions?.[0];
-    if (opcion && !opcion.selected) q = await this.llamar('POST', `/agentic/quotes/${q.id}/shipping-option`, { shippingOptionId: opcion.id });
-    const fa = q.amountBreakdown?.finalAmount;
-    const monto = Number(typeof fa === 'object' && fa !== null ? fa.amount : fa);
-    const moneda = String((typeof fa === 'object' && fa !== null ? fa.currency : undefined) ?? q.amountBreakdown?.currency ?? variante.price?.currency ?? 'MXN');
-    return {
-      id: q.id, comercio: s.comercio, productoId: s.productoId, nombreProducto: String(prod.name ?? s.query),
-      cantidad: s.cantidad, moneda, finalAmount: monto, expiresAt: q.expiresAt, paisEnvio: 'MX',
-    };
-  }
-  mapearCheckout(c: any, moneda: string): Checkout {
-    return { id: c.id, status: c.status, orderId: c.orderId ?? null, finalAmount: c.finalAmount != null ? Number(typeof c.finalAmount === 'object' ? c.finalAmount.amount : c.finalAmount) : null, moneda };
+    const lista = candidatos(busqueda?.products ?? [], s.comercio).slice(0, 3);
+    if (lista.length === 0) throw new ReapError('QUOTE_UNFULFILLABLE', `Sin productos disponibles y permitidos para "${s.query}" en ${nombre}`, 400);
+    let q: any = null;
+    let cand = lista[0];
+    let ultimo: unknown = null;
+    // Si la variante más barata no alcanza en stock, se prueba la siguiente (máx. 3 cotizaciones).
+    for (const c of lista) {
+      try {
+        q = await this.llamar(
+          'POST',
+          '/agentic/quotes',
+          {
+            email: this.cfg.email,
+            items: [{ variantId: c.variantId, quantity: s.cantidad }],
+            shippingAddress: {
+              firstName: 'Equipo', lastName: 'Teamblue', phone: '+525555555555',
+              addressLine1: 'Av. Paseo de la Reforma 222', city: 'Ciudad de México', region: 'CDMX', postalCode: '06600', country: 'MX',
+            },
+          },
+          { 'Idempotency-Key': crypto.randomUUID() },
+        );
+        cand = c;
+        break;
+      } catch (e) {
+        ultimo = e;
+        if (!(e instanceof ReapError && ['VARIANT_UNAVAILABLE', 'QUOTE_UNFULFILLABLE'].includes(e.code))) throw e;
+      }
+    }
+    if (!q) throw ultimo;
+    // Normalmente ya viene una opción seleccionada; solo se llama a shipping-option si no.
+    const opciones: any[] = q.shippingOptions ?? [];
+    if (opciones.length > 0 && !opciones.some((o) => o.selected))
+      q = await this.llamar('POST', `/agentic/quotes/${q.id}/shipping-option`, { shippingOptionId: opciones[0].id });
+    return parsearCotizacion(q, s, cand);
   }
   async crearCheckout(q: Cotizacion): Promise<Checkout> {
     const c = await this.llamar(
@@ -186,10 +263,11 @@ export class ReapReal implements ReapClient {
       { quoteId: q.id, enrollmentId: this.cfg.enrollmentId, presentation: { type: 'REDIRECT', returnUrl: this.cfg.returnUrl } },
       { 'Idempotency-Key': crypto.randomUUID(), 'X-Simulate-Checkout': 'COMPLETED' },
     );
-    let actual = this.mapearCheckout(c, q.moneda);
+    let actual = mapearCheckoutReap(c, q.moneda);
     const inicio = Date.now();
     const pollMs = this.cfg.pollMs ?? 2000;
-    const max = this.cfg.pollMaxMs ?? 60_000;
+    const max = this.cfg.pollMaxMs ?? 40_000;
+    // Aun con el header de simulación la respuesta inicial es REQUIRES_ACTION: sondear hasta estado final.
     while (!FINALES.includes(actual.status) && Date.now() - inicio < max) {
       await new Promise((r) => setTimeout(r, pollMs));
       actual = await this.obtenerCheckout(actual.id, q.moneda);
@@ -197,7 +275,7 @@ export class ReapReal implements ReapClient {
     return actual;
   }
   async obtenerCheckout(id: string, moneda = 'MXN'): Promise<Checkout> {
-    return this.mapearCheckout(await this.llamar('GET', `/agentic/checkouts/${id}`), moneda);
+    return mapearCheckoutReap(await this.llamar('GET', `/agentic/checkouts/${id}`), moneda);
   }
 }
 
