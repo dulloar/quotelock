@@ -37,6 +37,9 @@ export interface Cuentas {
   cambiadas: number;
   detenidas: number;
   pasosHumanos: number;
+  /** Partidas con un cargo esperando aprobación en Reap. */
+  porAprobar: number;
+  porAprobarEvento: boolean;
 }
 
 export function cuentas(e: Evento): Cuentas {
@@ -58,12 +61,14 @@ export function cuentas(e: Evento): Cuentas {
     bajoPresupuesto: centavos(Math.max(0, presupuesto - cobrado)),
     rebasaTecho: centavos(Math.max(0, cotizado - techo)),
     partidas: e.partidas.length,
-    cobradas: e.partidas.filter((p) => p.cobradoMXN !== null && (p.estado === 'pagado' || p.estado === 'ajustado'))
+    cobradas: e.partidas.filter((p) => p.cobradoMXN !== null && (p.estado === 'pagado' || p.estado === 'ajustado' || p.estado === 'aprobado'))
       .length,
     cargos: e.partidas.filter((p) => p.orderId !== null).length,
     cambiadas: cuenta('ajustado'),
     detenidas: cuenta('bloqueado'),
     pasosHumanos: e.timeline.filter((p) => p.actor === 'humano').length,
+    porAprobar: cuenta('por_aprobar'),
+    porAprobarEvento: e.estado === 'por_aprobar',
   };
 }
 
@@ -91,6 +96,13 @@ export function encabezado(e: Evento, c: Cuentas): Encabezado {
     const choque =
       c.rebasaTecho > 0 ? ` Tu techo es ${mxn(c.techo)}: se pasa por ${mxn(c.rebasaTecho)}.` : ` Tu techo es ${mxn(c.techo)}.`;
     return { titular: 'Me detuve. Necesito que revises.', entrada: base + choque };
+  }
+
+  if (c.porAprobarEvento) {
+    return {
+      titular: 'Espero tu aprobación en Reap.',
+      entrada: `Coticé y armé ${cuantas(c.porAprobar, 'cargo', 'cargos')} por ${mxn(c.cotizado)}. No cobro nada hasta que una persona los apruebe en la página de Reap.`,
+    };
   }
 
   const todas = c.cobradas === c.partidas;
@@ -198,6 +210,12 @@ export interface Veredicto {
 }
 
 export function veredicto(p: Partida, c: Cuentas): Veredicto {
+  if (p.estado === 'por_aprobar') {
+    return { tono: 'margen', palabra: 'Por aprobar', cuenta: 'el cargo espera tu aprobación en Reap.' };
+  }
+  if (p.estado === 'aprobado') {
+    return { tono: 'cabe', palabra: 'Aprobado · orden en proceso', cuenta: 'ya lo aprobaste en Reap.' };
+  }
   if (p.estado === 'pendiente') {
     return { tono: 'neutro', palabra: 'Pendiente', cuenta: `todavía no la cotizo. Su tope es ${mxn(p.presupuestadoMXN)}.` };
   }
@@ -239,6 +257,8 @@ export interface Grupo {
 }
 
 const ORDEN_GRUPOS: { estado: EstadoPartida; titulo: string }[] = [
+  { estado: 'por_aprobar', titulo: 'Esperan tu aprobación en Reap' },
+  { estado: 'aprobado', titulo: 'Aprobadas · orden en proceso' },
   { estado: 'pagado', titulo: 'Pagué tal cual' },
   { estado: 'ajustado', titulo: 'Cambié por una opción más barata' },
   { estado: 'bloqueado', titulo: 'Detenidas, sin cobro' },
@@ -373,7 +393,7 @@ export function pasosClave(e: Evento, c: Cuentas, lectura: LecturaTimeline): Pas
 
 /** «Nadie tuvo que intervenir» solo si de verdad nadie intervino y no se está pidiendo que alguien lo haga. */
 export function nadieIntervino(c: Cuentas): boolean {
-  return c.vista === 'cobro' && c.pasosHumanos === 0;
+  return c.vista === 'cobro' && !c.porAprobarEvento && c.pasosHumanos === 0;
 }
 
 /* ---------- la barra ---------- */

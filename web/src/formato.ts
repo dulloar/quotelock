@@ -34,6 +34,17 @@ export function fechaLarga(iso: string): string {
   });
 }
 
+/** Fecha y hora cortas locales, p. ej. «9 oct, 21:04». */
+export function horaLimite(iso: string): string {
+  return new Date(iso).toLocaleString('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 export function horaCorta(iso: string): string {
   return new Date(iso).toLocaleTimeString('es-MX', {
     hour: '2-digit',
@@ -48,10 +59,13 @@ export const ETIQUETA_ESTADO_EVENTO = {
   pagado: 'Pagado',
   ajustado: 'Ajustado dentro del margen',
   revision_humana: 'Revisión humana',
+  por_aprobar: 'Por aprobar',
 } as const;
 
 export const ETIQUETA_ESTADO_PARTIDA = {
   pendiente: 'Pendiente',
+  por_aprobar: 'Por aprobar',
+  aprobado: 'Aprobado · orden en proceso',
   pagado: 'Pagado',
   ajustado: 'Ajustado',
   no_lograda: 'No lograda',

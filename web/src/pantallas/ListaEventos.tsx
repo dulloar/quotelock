@@ -11,6 +11,7 @@ const ICONO_ESTADO: Record<EstadoEvento, string> = {
   ajustado: '#i-margen',
   revision_humana: '#i-alto-inv',
   borrador: '#i-borrador',
+  por_aprobar: '#i-margen',
 };
 
 export function ListaEventos() {
