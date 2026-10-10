@@ -785,6 +785,201 @@
   overflow-wrap: anywhere;
 }
 
+/* ---------- pago con aprobación en Reap ---------- */
+.ev-solo-lector {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* modo real: contorno continuo en índigo; puede partirse en dos renglones a 375 px */
+.ev-simulado--real {
+  border: 1.5px solid var(--marca);
+  color: var(--marca);
+  white-space: normal;
+}
+/* la pantalla se actualiza sola: se dice con palabras, sin animación */
+.ev-sondeo {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--esp-2);
+  margin-top: var(--esp-4);
+  font-size: var(--texto-sm);
+  line-height: 1.4;
+  color: var(--tinta-2);
+}
+.ev-sondeo i {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+  border-radius: 50%;
+  border: 2px solid var(--marca);
+  background: var(--marca-suave);
+}
+.ev-sondeo b {
+  color: var(--tinta);
+  font-weight: 600;
+}
+.ev-sondeo--fallo {
+  color: var(--tinta);
+}
+.ev-sondeo--fallo i {
+  border-radius: 2px;
+  border: 2px dashed var(--margen-tinta);
+  background: var(--margen-suave);
+}
+
+/* botón de la pantalla del evento: «Ejecutar» y el enlace «Aprobar en Reap» */
+.ev-boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--esp-2);
+  width: 100%;
+  min-height: 3rem;
+  padding: var(--esp-2) var(--esp-5);
+  border: 1.5px solid var(--marca);
+  border-radius: var(--radio-chico);
+  background: var(--marca);
+  color: var(--sobre-marca);
+  font-family: var(--f-texto);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ev-boton .ev-ic {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.ev-boton:hover {
+  background: color-mix(in oklch, var(--marca) 86%, var(--tinta));
+}
+.ev-boton:focus-visible {
+  outline: 3px solid var(--foco);
+  outline-offset: 2px;
+}
+.ev-boton--grande {
+  min-height: 3.5rem;
+  border-radius: var(--radio);
+  font-family: var(--f-titular);
+  font-size: var(--texto-lg);
+}
+.ev-boton--secundario {
+  background: var(--superficie);
+  color: var(--marca);
+}
+.ev-boton--secundario:hover {
+  background: var(--marca-suave);
+}
+.ev-boton:disabled {
+  border-color: var(--tinta-2);
+  background: var(--superficie-2);
+  color: var(--tinta-2);
+  cursor: not-allowed;
+}
+.ev-boton[aria-busy='true'] {
+  border: 2px dashed var(--marca);
+  background: var(--marca-suave);
+  color: var(--marca);
+  cursor: progress;
+}
+.ev-accion {
+  margin-top: var(--esp-5);
+  display: grid;
+  gap: var(--esp-3);
+}
+.ev-accion__nota {
+  font-size: var(--texto-sm);
+  line-height: 1.4;
+  color: var(--tinta-2);
+  max-width: 56ch;
+}
+
+/* las que esperan a la persona: el grupo entero lleva contorno índigo */
+.ev-grupo--por_aprobar > ul {
+  border: 2px solid var(--marca);
+}
+.ev-grupo--por_aprobar .ev-partida {
+  padding-bottom: var(--esp-1);
+}
+.ev-aprobar {
+  margin-top: var(--esp-3);
+  display: grid;
+  gap: var(--esp-2);
+}
+.ev-aprobar__vence,
+.ev-aprobar__falta {
+  font-size: var(--texto-sm);
+  line-height: 1.4;
+  color: var(--tinta-2);
+}
+.ev-aprobar__vence strong,
+.ev-aprobar__falta strong {
+  color: var(--tinta);
+}
+/* palabra de estado de la partida: forma (cápsula con contorno) + palabra */
+.ev-sello {
+  display: inline-block;
+  margin-right: var(--esp-2);
+  padding: 1px 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  vertical-align: 1px;
+}
+.ev-sello--reglas {
+  color: var(--marca);
+  border-style: dashed;
+  background: var(--marca-suave);
+}
+.ev-sello--cabe {
+  color: var(--cabe);
+  background: var(--cabe-suave);
+}
+/* lo preparado sin cobrar: trama índigo con contorno punteado, a continuación de lo cobrado */
+.ev-ll-aprobar {
+  border: 2px dashed var(--marca);
+  background: repeating-linear-gradient(135deg, var(--marca) 0 2px, var(--marca-suave) 2px 7px);
+}
+.ev-k--aprobar {
+  border: 1.5px dashed var(--marca);
+  background: repeating-linear-gradient(135deg, var(--marca) 0 1.5px, var(--marca-suave) 1.5px 5px);
+}
+/* paso de una persona en «Así lo hice»: marcador cuadrado en tinta, distinto del círculo del agente */
+.ev-paso--humano p {
+  border-radius: 10px;
+  padding: var(--esp-2) var(--esp-3);
+  font-weight: 600;
+  background: var(--superficie-2);
+}
+.ev-pasos .ev-paso--humano::before {
+  background: var(--tinta);
+  border-color: var(--tinta);
+  color: var(--superficie);
+  border-radius: 9px;
+}
+.ev-paso--humano p span {
+  color: var(--tinta);
+}
+.ev-contexto__notas {
+  white-space: pre-wrap;
+}
+.ev-contexto__pie {
+  margin-top: var(--esp-2);
+  font-size: var(--texto-xs);
+  color: var(--tinta-2);
+}
+
 /* ---------- ancho ---------- */
 @media (min-width: 600px) {
   .ev-medida {
@@ -795,6 +990,11 @@
   }
   .ev-pido {
     padding: 24px 26px;
+  }
+  .ev-boton {
+    width: auto;
+    min-width: 16rem;
+    justify-self: start;
   }
 }
 @media (min-width: 900px) {

@@ -5,7 +5,9 @@ import type { Cuentas } from './derivar';
 
 // La medida protagonista: lo cobrado contra el techo, en una sola escala que va de $0 al mayor
 // entre el techo y lo cotizado. El techo es un muro. En el alto no hay relleno: lo cotizado se
-// dibuja en contorno, y lo que rebasa queda del otro lado del muro.
+// dibuja en contorno, y lo que rebasa queda del otro lado del muro. Esperando aprobación, lo
+// preparado sin cobrar va en trama índigo a continuación de lo cobrado: al aprobarse cada cargo,
+// ese tramo se vuelve relleno.
 
 const pct = (n: number) => `${n}%`;
 
@@ -37,6 +39,9 @@ export function BarraTecho({ cuentas: c }: { cuentas: Cuentas }) {
             {b.cobradoEnPresupuesto > 0 && <i className="ev-ll-cabe" style={{ width: pct(b.cobradoEnPresupuesto) }} />}
             {b.cobradoEnMargen > 0 && (
               <i className="ev-ll-margen" style={{ left: pct(b.presupuesto), width: pct(b.cobradoEnMargen) }} />
+            )}
+            {b.porAprobarAncho > 0 && (
+              <i className="ev-ll-aprobar" style={{ left: pct(b.porAprobarDesde), width: pct(b.porAprobarAncho) }} />
             )}
             {sinCobro && <i className="ev-ll-cotizado" style={{ width: pct(b.cotizadoHastaTecho) }} />}
             {b.cotizadoFuera > 0 && (
@@ -74,6 +79,12 @@ export function BarraTecho({ cuentas: c }: { cuentas: Cuentas }) {
           <li>
             <i className="ev-k ev-k--usado" />
             Margen usado
+          </li>
+        )}
+        {b.porAprobarAncho > 0 && (
+          <li>
+            <i className="ev-k ev-k--aprobar" />
+            Por aprobar, sin cobrar
           </li>
         )}
         {sinCobro && (

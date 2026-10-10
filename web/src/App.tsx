@@ -10,7 +10,8 @@ function rutaActual(): string {
 /**
  * Iconos de toda la web, una sola vez. Se usan con
  * `<svg className="ic" aria-hidden="true"><use href="#i-cabe" /></svg>`.
- * Cada estado tiene forma propia: círculo = cabe, triángulo = margen, octágono = alto, escudo = reglas.
+ * Cada estado tiene forma propia: círculo = cabe, triángulo = margen, octágono = alto, escudo = reglas,
+ * reloj de arena = espera tu aprobación.
  */
 function Iconos() {
   return (
@@ -56,6 +57,16 @@ function Iconos() {
       <symbol id="i-borrador" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="9.6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeDasharray="4 3.55" />
         <circle cx="12" cy="12" r="2.6" fill="currentColor" />
+      </symbol>
+      <symbol id="i-espera" viewBox="0 0 24 24">
+        <path
+          d="M4.5 1.5h15v4.2L14.2 12l5.3 6.3v4.2h-15v-4.2L9.8 12 4.5 5.7z"
+          fill="currentColor"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+        <path d="M8 19.6h8L12 15z" fill="var(--superficie)" />
       </symbol>
       <symbol id="i-error" viewBox="0 0 24 24">
         <rect x="2" y="2" width="20" height="20" rx="5" fill="currentColor" />

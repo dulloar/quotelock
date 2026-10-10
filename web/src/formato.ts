@@ -45,6 +45,7 @@ export function horaCorta(iso: string): string {
 
 export const ETIQUETA_ESTADO_EVENTO = {
   borrador: 'Borrador',
+  por_aprobar: 'Por aprobar',
   pagado: 'Pagado',
   ajustado: 'Ajustado dentro del margen',
   revision_humana: 'Revisión humana',
@@ -52,8 +53,15 @@ export const ETIQUETA_ESTADO_EVENTO = {
 
 export const ETIQUETA_ESTADO_PARTIDA = {
   pendiente: 'Pendiente',
+  por_aprobar: 'Por aprobar',
+  aprobado: 'Aprobado',
   pagado: 'Pagado',
   ajustado: 'Ajustado',
   no_lograda: 'No lograda',
   bloqueado: 'Bloqueado',
 } as const;
+
+/** Hora local sin segundos, para avisos que lee una persona («vence a las 21:14»). */
+export function horaMinuto(iso: string): string {
+  return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+}

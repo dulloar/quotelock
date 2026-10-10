@@ -1,7 +1,7 @@
 // Formas de estado: cada una es distinta en silueta, para que el color nunca vaya solo.
 // Los colores salen de tokens.css (currentColor + var()).
 
-export type TipoIcono = 'cabe' | 'margen' | 'alto' | 'altoInvertido' | 'reglas' | 'cambio' | 'pendiente' | 'noLograda';
+export type TipoIcono = 'cabe' | 'margen' | 'alto' | 'altoInvertido' | 'reglas' | 'cambio' | 'pendiente' | 'noLograda' | 'espera' | 'fuera';
 
 const CLASE_COLOR: Record<TipoIcono, string> = {
   cabe: 'ev-c-cabe',
@@ -12,6 +12,8 @@ const CLASE_COLOR: Record<TipoIcono, string> = {
   cambio: 'ev-c-reglas',
   pendiente: 'ev-c-neutro',
   noLograda: 'ev-c-neutro',
+  espera: 'ev-c-reglas',
+  fuera: '',
 };
 
 function Trazo({ tipo }: { tipo: TipoIcono }) {
@@ -64,6 +66,17 @@ function Trazo({ tipo }: { tipo: TipoIcono }) {
           <circle cx="12" cy="12" r="9.8" fill="none" stroke="currentColor" strokeWidth="2.2" strokeDasharray="3.4 3" />
           <circle cx="12" cy="12" r="2.2" fill="currentColor" />
         </>
+      );
+    case 'espera': // reloj de arena: preparado, esperando a una persona
+      return (
+        <>
+          <path d="M4.5 1.5h15v4.2L14.2 12l5.3 6.3v4.2h-15v-4.2L9.8 12 4.5 5.7z" fill="currentColor" strokeLinejoin="round" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M8 19.6h8L12 15z" fill="var(--superficie)" />
+        </>
+      );
+    case 'fuera': // flecha que sale del cuadro: abre otra pestaña
+      return (
+        <path d="M13.5 4.5H19.5V10.5M19.5 4.5l-8.2 8.2M10 6H6.2A1.7 1.7 0 0 0 4.5 7.7v10.1a1.7 1.7 0 0 0 1.7 1.7h10.1a1.7 1.7 0 0 0 1.7-1.7V14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
       );
     case 'noLograda': // rombo con diagonal
       return (
