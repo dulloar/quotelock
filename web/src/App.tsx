@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ListaEventos } from './pantallas/ListaEventos';
+import { PantallaEvento } from './pantallas/PantallaEvento';
 
 function rutaActual(): string {
   return window.location.hash.replace(/^#/, '') || '/';
@@ -24,7 +25,7 @@ export function App() {
         </a>
         <span className="barra__lema">El agente no compra: gobierna el dinero del evento</span>
       </header>
-      <main>{idEvento ? <p className="vacio">Evento {idEvento}</p> : <ListaEventos />}</main>
+      <main>{idEvento ? <PantallaEvento id={idEvento} /> : <ListaEventos />}</main>
     </div>
   );
 }
