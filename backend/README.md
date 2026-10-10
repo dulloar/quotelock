@@ -13,7 +13,7 @@ npm run typecheck  # tsc --noEmit
 Variables: `PORT`, `REAP_API_KEY` (vacía = modo simulado), `REAP_BASE_URL`, `REAP_VERSION`, `REAP_RETURN_URL`, `REAP_ENROLLMENT_ID`, `REAP_EMAIL`, `FX_USD_MXN` (default 18.5), `MODO_PAGO` (`aprobacion` por defecto con `REAP_API_KEY`, o `simulado`).
 
 ## Rutas
-`GET /api/eventos`, `POST /api/eventos`, `GET /api/eventos/:id`, `POST /api/eventos/:id/ejecutar` (contrato en `docs/05-tareas-mvp.md`). El brief acepta `notas` opcional: se guarda y nunca influye en reglas ni montos. Ejecutar un evento ya ejecutado no vuelve a cobrar.
+`GET /api/eventos`, `POST /api/eventos`, `GET /api/eventos/:id`, `POST /api/eventos/:id/ejecutar` (contrato en `docs/05-tareas-mvp.md`). El brief acepta `notas` opcional: se guarda y nunca influye en reglas ni montos. Ejecutar un evento ya ejecutado no vuelve a cobrar. `POST /api/eventos/:id/reintentar` (sin body) recotiza y crea cargo nuevo para las partidas `no_lograda`/`bloqueado` de un evento en `revision_humana` (409 si no hay nada que reintentar; respeta techo y no cobro doble).
 
 ## Tres briefs (40 asistentes, mismo evento)
 Con el catálogo simulado y FX 18.5, el plan preferido cotiza 21,534.95 MXN y el plan con las alternativas más baratas 6,718.90 MXN.

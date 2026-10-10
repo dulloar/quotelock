@@ -6,7 +6,7 @@ import { ReapError } from './reap.ts';
 import { aMXN, evaluar, reglaTecho } from './reglas.ts';
 import type { Resultado } from './reglas.ts';
 import { armarPlan } from './plan.ts';
-import type { ItemPlan } from './plan.ts';
+import type { ItemPlan, PartidaPlan } from './plan.ts';
 
 export interface Deps {
   reap: ReapClient;
@@ -69,6 +69,7 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
     evento.modoPago = deps.reap.modoPago;
     evento.modoSimulado = deps.reap.modoSimulado || deps.reap.modoPago === 'simulado';
     const plan = armarPlan(evento, !deps.reap.modoSimulado);
+    interno.plan = plan;
     log('agente', `Armó ${plan.length} partidas para ${evento.asistentes} asistentes con presupuesto de ${evento.presupuestoMXN} MXN`);
     const elegidas: (Elegida | null)[] = [];
     evento.partidas = plan.map((p) => ({
@@ -202,6 +203,116 @@ export async function ejecutar(deps: Deps, evento: Evento, interno: Interno): Pr
   }
 }
 
+// Reintenta las partidas no_lograda/bloqueado: recotiza y crea un cargo nuevo si las reglas lo permiten.
+export type ResultadoReintento = { ok: true; evento: Evento } | { ok: false; error: string };
+
+export async function reintentar(deps: Deps, evento: Evento, interno: Interno): Promise<ResultadoReintento> {
+  const fallidas = evento.partidas.map((_p, i) => i).filter((i) => ['no_lograda', 'bloqueado'].includes(evento.partidas[i].estado));
+  if (!['revision_humana', 'por_aprobar'].includes(evento.estado) || fallidas.length === 0 || !interno.plan)
+    return { ok: false, error: 'Solo se puede reintentar un evento en revisión humana con partidas no logradas o bloqueadas' };
+  if (interno.ejecutando || interno.refrescando) return { ok: false, error: 'El evento está en proceso; intenta de nuevo en unos segundos' };
+  interno.ejecutando = true;
+  const plan = interno.plan;
+  const log = (actor: Actor, mensaje: string) => evento.timeline.push({ hora: deps.ahora().toISOString(), actor, mensaje });
+  try {
+    const cotizar = async (item: ItemPlan): Promise<Elegida | null> => {
+      try {
+        const cot = await deps.reap.cotizar({ comercio: item.comercio, productoId: item.productoId, query: item.query, cantidad: item.cantidad });
+        const { montoMXN, tipoCambio } = aMXN(cot.finalAmount, cot.moneda, deps.fx);
+        return { item, cot, mxn: montoMXN, tc: tipoCambio, replaneada: false };
+      } catch (e) {
+        log('reglas', `No se pudo recotizar ${item.descripcion} en ${item.comercio} (${e instanceof ReapError ? e.code : 'ERROR'})`);
+        return null;
+      }
+    };
+    const elegidas = new Map<number, Elegida>();
+    for (const i of fallidas) {
+      const pp: PartidaPlan = plan[i];
+      let el = await cotizar(pp.preferido);
+      if (!el || el.mxn > pp.presupuestadoMXN) {
+        let mejor: Elegida | null = null;
+        for (const alt of pp.alternativas) {
+          const a = await cotizar(alt);
+          if (!a) continue;
+          a.replaneada = true;
+          if (!mejor || a.mxn < mejor.mxn) mejor = a;
+          if (a.mxn <= pp.presupuestadoMXN) break;
+        }
+        if (mejor && (!el || mejor.mxn < el.mxn)) el = mejor;
+      }
+      if (!el) {
+        log('reglas', `No se pudo recotizar ${pp.nombre}; no se creó ningún checkout y el evento sigue en revisión humana`);
+        return { ok: true, evento };
+      }
+      elegidas.set(i, el);
+    }
+    // Total real del plan: cobrado (aprobado/pagado) + cotizado (por_aprobar) + nuevas cotizaciones.
+    let total = 0;
+    evento.partidas.forEach((p, i) => {
+      const el = elegidas.get(i);
+      if (el) total += el.mxn;
+      else if (p.estado === 'aprobado' || p.estado === 'pagado' || p.estado === 'ajustado') total += p.cobradoMXN ?? 0;
+      else if (p.estado === 'por_aprobar') total += p.cotizadoMXN ?? 0;
+    });
+    total = redondear(total);
+    const ver = reglaTecho(total, evento.presupuestoMXN, evento.margen);
+    log('reglas', ver.motivo);
+    if (!ver.ok) {
+      log('reglas', 'El reintento rebasa el techo. No se creó ningún checkout; el evento sigue en revisión humana');
+      return { ok: true, evento };
+    }
+    for (const i of fallidas) {
+      const el = elegidas.get(i)!;
+      const part = evento.partidas[i];
+      const r = await pagar(deps, {
+        presupuestoMXN: evento.presupuestoMXN, margen: evento.margen, cotizacion: el.cot,
+        totalPlanMXN: total, estadosCheckoutPrevios: interno.checkouts[i] ?? [],
+      });
+      if (!r.ok || !r.checkout) {
+        log('reglas', `Reintento de ${part.nombre} bloqueado: ${r.resultados.filter((x) => !x.ok).map((x) => x.motivo).join('; ')}`);
+        continue;
+      }
+      (interno.checkouts[i] ??= []).push(r.checkout.status);
+      if (r.checkout.status === 'REQUIRES_ACTION' && r.checkout.nextAction?.url) {
+        part.estado = 'por_aprobar';
+        part.comercio = el.cot.comercio;
+        part.cotizadoMXN = el.mxn;
+        part.tipoCambio = el.tc;
+        part.checkoutId = r.checkout.id;
+        part.urlAprobacion = r.checkout.nextAction.url;
+        part.aprobacionExpira = r.checkout.nextAction.expiresAt;
+        if (el.replaneada) interno.hayReplan = true;
+        log('agente', `La cotización de ${part.nombre} venció o el cargo no se logró; recotizó en ${el.cot.comercio} por ${el.mxn} MXN y creó un cargo nuevo`);
+      } else if (r.checkout.status === 'COMPLETED') {
+        const cobrado = aMXN(r.checkout.finalAmount ?? el.cot.finalAmount, r.checkout.moneda, deps.fx).montoMXN;
+        part.comercio = el.cot.comercio;
+        part.cotizadoMXN = el.mxn;
+        part.tipoCambio = el.tc;
+        part.cobradoMXN = cobrado;
+        part.orderId = r.checkout.orderId;
+        part.estado = el.replaneada ? 'ajustado' : 'pagado';
+        if (el.replaneada) interno.hayReplan = true;
+        log('agente', `Recotizó ${part.nombre} en ${el.cot.comercio} por ${el.mxn} MXN y la pagó (orden ${r.checkout.orderId})`);
+      } else {
+        part.estado = 'no_lograda';
+        log('agente', `El checkout nuevo de ${part.nombre} terminó en ${r.checkout.status}`);
+      }
+    }
+    evento.totales.cotizadoMXN = redondear(evento.partidas.reduce((s, p) => s + (p.estado === 'bloqueado' || p.estado === 'no_lograda' ? 0 : (p.cotizadoMXN ?? p.cobradoMXN ?? 0)), 0));
+    evento.totales.cobradoMXN = redondear(evento.partidas.reduce((s, p) => s + (p.cobradoMXN ?? 0), 0));
+    if (evento.partidas.some((p) => p.estado === 'por_aprobar')) evento.estado = 'por_aprobar';
+    else if (evento.partidas.some((p) => p.estado === 'no_lograda' || p.estado === 'bloqueado')) evento.estado = 'revision_humana';
+    else if (interno.hayReplan || evento.totales.cotizadoMXN > evento.presupuestoMXN) evento.estado = 'ajustado';
+    else evento.estado = 'pagado';
+    const base = evento.totales.cobradoMXN > 0 ? evento.totales.cobradoMXN : evento.totales.cotizadoMXN;
+    evento.totales.costoPorAsistenteMXN = redondear(base / evento.asistentes);
+    log('agente', `Evento en estado ${evento.estado}`);
+    return { ok: true, evento };
+  } finally {
+    interno.ejecutando = false;
+  }
+}
+
 const MIN_RONDA_MS = 2000;
 
 // Consulta en Reap los checkouts pendientes de aprobación humana (máx. una ronda cada 2 s por evento).
@@ -231,6 +342,12 @@ export async function refrescar(deps: Deps, evento: Evento, interno: Interno): P
         log('humano', `Aprobó el cargo de ${part.nombre} en Reap (${cobrado} MXN, orden ${c.orderId})`);
       } else if (c.status === 'FAILED' || c.status === 'EXPIRED') {
         part.estado = 'no_lograda';
+        // El checkout ya no está activo: se reemplaza REQUIRES_ACTION por el estado terminal (permite reintentar).
+        const prev = interno.checkouts[i] ?? [];
+        const k = prev.lastIndexOf('REQUIRES_ACTION');
+        if (k >= 0) prev.splice(k, 1);
+        prev.push(c.status);
+        interno.checkouts[i] = prev;
         log('reglas', `El cargo de ${part.nombre} terminó en ${c.status}; no se cobró`);
       }
     }
