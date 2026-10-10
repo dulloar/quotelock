@@ -162,3 +162,65 @@ test('MODO_PAGO=simulado con cliente real falso -> pagado y modoSimulado', async
   assert.equal(e.modoPago, 'simulado');
   assert.ok(e.partidas.every((p) => p.estado === 'pagado' && p.orderId?.startsWith('sim_')));
 });
+
+// ---- Reintentar ----
+import { reintentar } from '../src/orquestador.ts';
+
+async function conFallida() {
+  const m = montarReal('aprobacion');
+  await ejecutar(m.deps, m.e, m.store.interno(m.e.id));
+  m.reap.estadoGet = 'MIXTO';
+  await refrescar(m.deps, m.e, m.store.interno(m.e.id));
+  assert.equal(m.e.partidas[0].estado, 'no_lograda');
+  return m;
+}
+
+test('reintentar: recotiza la partida fallida, crea 1 checkout y termina cobrado', async () => {
+  const { reap, deps, store, e, avanzar } = await conFallida();
+  const antes = reap.creados;
+  const r = await reintentar(deps, e, store.interno(e.id));
+  assert.ok(r.ok);
+  assert.equal(reap.creados, antes + 1);
+  assert.equal(e.partidas[0].estado, 'por_aprobar');
+  assert.ok(e.partidas[0].urlAprobacion && e.partidas[0].checkoutId === `c${antes + 1}`);
+  assert.equal(e.estado, 'por_aprobar');
+  assert.ok(e.partidas.slice(1).every((p) => p.estado === 'aprobado'));
+  avanzar();
+  reap.estadoGet = 'PROCESSING';
+  await refrescar(deps, e, store.interno(e.id));
+  assert.ok(['pagado', 'ajustado'].includes(e.estado));
+  assert.equal(e.totales.cobradoMXN, 300);
+});
+
+test('reintentar: si rebasa el techo no crea checkouts y sigue en revision_humana', async () => {
+  const { reap, deps, store, e } = await conFallida();
+  reap.cotizar = async (s) => ({ id: 'q', comercio: s.comercio, productoId: s.productoId, nombreProducto: s.query, cantidad: s.cantidad, moneda: 'MXN', finalAmount: 50000, expiresAt: '2099-01-01T00:00:00Z', paisEnvio: 'MX' });
+  const antes = reap.creados;
+  await reintentar(deps, e, store.interno(e.id));
+  assert.equal(reap.creados, antes);
+  assert.equal(e.estado, 'revision_humana');
+  assert.equal(e.partidas[0].estado, 'no_lograda');
+  assert.equal(e.timeline.at(-2)?.actor, 'reglas');
+});
+
+test('reintentar: sin partidas fallidas -> error (409)', async () => {
+  const { deps, store, e } = montarReal('aprobacion');
+  await ejecutar(deps, e, store.interno(e.id));
+  const r = await reintentar(deps, e, store.interno(e.id));
+  assert.equal(r.ok, false);
+});
+
+test('reintentar: concurrente no duplica y no reintenta partidas con checkout PROCESSING', async () => {
+  const { reap, deps, store, e } = await conFallida();
+  const antes = reap.creados;
+  await Promise.all([reintentar(deps, e, store.interno(e.id)), reintentar(deps, e, store.interno(e.id))]);
+  assert.equal(reap.creados, antes + 1);
+  assert.ok(e.partidas.slice(1).every((p) => p.estado === 'aprobado'));
+  // partida con checkout PROCESSING marcada no_lograda a la fuerza: la regla de cobro doble lo impide
+  e.estado = 'revision_humana';
+  e.partidas[1].estado = 'no_lograda';
+  const a2 = reap.creados;
+  await reintentar(deps, e, store.interno(e.id));
+  assert.equal(reap.creados, a2);
+  assert.equal(e.partidas[1].estado, 'no_lograda');
+});

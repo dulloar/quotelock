@@ -1,4 +1,4 @@
-import { mensajeLegible, mxn, porcentaje } from '../formato';
+import { ETIQUETA_ESTADO_PARTIDA, mensajeLegible, mxn, porcentaje } from '../formato';
 import type { EstadoPartida, Evento, Partida } from '../tipos';
 import type { LecturaTimeline } from './leerTimeline';
 
@@ -49,6 +49,8 @@ export interface Cuentas {
   enProceso: number;
   /** Partidas no logradas que sí llegaron a tener un cargo en Reap (falló o venció su aprobación). */
   cargosFallidos: number;
+  /** El evento entero espera aprobación (estado `por_aprobar`). Viene de main. */
+  porAprobarEvento: boolean;
 }
 
 export function cuentas(e: Evento): Cuentas {
@@ -94,6 +96,7 @@ export function cuentas(e: Evento): Cuentas {
     margenComprometido: centavos(Math.max(0, Math.min(comprometido, techo) - presupuesto)),
     enProceso: cuenta('aprobado'),
     cargosFallidos: e.partidas.filter((p) => p.estado === 'no_lograda' && !!p.checkoutId).length,
+    porAprobarEvento: e.estado === 'por_aprobar',
   };
 }
 
@@ -322,8 +325,8 @@ export function veredicto(p: Partida, c: Cuentas): Veredicto {
 
 /** La palabra de estado de una partida que pasó por aprobación en Reap. Sin cargo en Reap, no lleva sello. */
 export function sello(p: Partida): { tono: Tono; palabra: string } | null {
-  if (p.estado === 'por_aprobar') return { tono: 'reglas', palabra: 'Por aprobar' };
-  if (p.estado === 'aprobado') return { tono: 'cabe', palabra: 'Aprobada' };
+  if (p.estado === 'por_aprobar') return { tono: 'reglas', palabra: ETIQUETA_ESTADO_PARTIDA.por_aprobar };
+  if (p.estado === 'aprobado') return { tono: 'cabe', palabra: ETIQUETA_ESTADO_PARTIDA.aprobado };
   if (p.estado === 'pagado' && p.checkoutId) return { tono: 'cabe', palabra: 'Pagada' };
   return null;
 }
@@ -338,8 +341,8 @@ export interface Grupo {
 }
 
 const ORDEN_GRUPOS: { estado: EstadoPartida; titulo: string }[] = [
-  { estado: 'por_aprobar', titulo: 'Esperan tu aprobación' },
-  { estado: 'aprobado', titulo: 'Aprobadas por ti, orden en proceso' },
+  { estado: 'por_aprobar', titulo: 'Esperan tu aprobación en Reap' },
+  { estado: 'aprobado', titulo: 'Aprobadas · orden en proceso' },
   { estado: 'pagado', titulo: 'Pagué tal cual' },
   { estado: 'ajustado', titulo: 'Cambié por una opción más barata' },
   { estado: 'bloqueado', titulo: 'Detenidas, sin cobro' },
@@ -521,7 +524,7 @@ export function pasosClave(e: Evento, c: Cuentas, lectura: LecturaTimeline): Pas
 
 /** «Nadie tuvo que intervenir» solo si de verdad nadie intervino y no se está pidiendo que alguien lo haga. */
 export function nadieIntervino(c: Cuentas): boolean {
-  return c.vista === 'cobro' && c.pasosHumanos === 0;
+  return c.vista === 'cobro' && !c.porAprobarEvento && c.pasosHumanos === 0;
 }
 
 /* ---------- la barra ---------- */

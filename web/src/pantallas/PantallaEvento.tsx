@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ejecutarEvento, mensajeDeError, obtenerEvento } from '../datos/fuente';
+import { ejecutarEvento, mensajeDeError, obtenerEvento, reintentarEvento } from '../datos/fuente';
 import type { Lectura } from '../datos/fuente';
 import { BarraTecho } from '../evento/BarraTecho';
 import {
@@ -29,7 +29,9 @@ import './evento.css';
 //
 // Pago con aprobación en Reap: mientras el evento está `por_aprobar` la pantalla vuelve a leerlo
 // cada 3 segundos (el backend refresca contra Reap en cada GET) y cada partida pendiente trae
-// su enlace «Aprobar en Reap».
+// su enlace «Aprobar en Reap». Si un cargo falla o vence, el evento queda en `revision_humana`
+// y aparece «Recotizar y reintentar» (POST /api/eventos/:id/reintentar).
+// El sondeo y el reintento son los de main; la presentación es la de la dirección F.
 
 /** Cada cuánto se vuelve a leer un evento que espera aprobación. Lo fija el contrato (docs/05). */
 const SONDEO_MS = 3_000;
@@ -84,6 +86,17 @@ interface Sondeo {
   /** Reloj de la pantalla: avanza con cada intento, para decir si una aprobación ya venció. */
   ahora: number;
 }
+
+/** Lo que pasó con el reintento, para decirlo junto al botón. */
+interface Reintento {
+  enCurso: boolean;
+  /** El backend lo rechazó (400/409) o no respondió. */
+  error: string | null;
+  /** Respondió bien pero el evento sigue detenido: la última razón que dieron las reglas. */
+  sigueDetenido: string | null;
+}
+
+const SIN_REINTENTO: Reintento = { enCurso: false, error: null, sigueDetenido: null };
 
 const horaDe = (ms: number) => horaCorta(new Date(ms).toISOString());
 
@@ -161,6 +174,57 @@ function Ejecutar({
         <p className="ev-aviso ev-aviso--error" role="alert">
           <Icono tipo="alto" />
           <span>No pude ejecutarlo: {error}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Cuándo ofrece main el reintento: evento detenido, pago con aprobación y alguna partida sin cobrar. */
+function puedeReintentar(evento: Evento): boolean {
+  return (
+    evento.estado === 'revision_humana' &&
+    evento.modoPago === 'aprobacion' &&
+    evento.partidas.some((p) => p.estado === 'no_lograda' || p.estado === 'bloqueado')
+  );
+}
+
+function Reintentar({ evento, reintento, alReintentar }: { evento: Evento; reintento: Reintento; alReintentar: () => void }) {
+  const puede = puedeReintentar(evento);
+  if (!puede && !reintento.error && !reintento.sigueDetenido) return null;
+  const n = evento.partidas.filter((p) => p.estado === 'no_lograda' || p.estado === 'bloqueado').length;
+  return (
+    <div className="ev-accion">
+      {puede && (
+        <>
+          <button
+            type="button"
+            className="ev-boton ev-boton--grande"
+            onClick={alReintentar}
+            disabled={reintento.enCurso}
+            aria-busy={reintento.enCurso || undefined}
+          >
+            {reintento.enCurso ? 'Recotizando…' : 'Recotizar y reintentar'}
+          </button>
+          <p className="ev-accion__nota" role="status">
+            {reintento.enCurso
+              ? 'Estoy cotizando de nuevo y validando contra tu techo. No cierres esta pantalla.'
+              : `Vuelvo a cotizar ${n === 1 ? 'la partida que no se cobró' : `las ${n} partidas que no se cobraron`} y, si ${n === 1 ? 'cabe' : 'caben'} bajo tu techo, preparo ${n === 1 ? 'un cargo nuevo' : 'cargos nuevos'} para que ${n === 1 ? 'lo' : 'los'} apruebes en Reap. Lo ya cobrado no se cobra otra vez.`}
+          </p>
+        </>
+      )}
+      {reintento.sigueDetenido && !reintento.enCurso && (
+        <p className="ev-aviso ev-aviso--reglas" role="status">
+          <Icono tipo="reglas" />
+          <span>
+            <strong>Recoticé y sigo detenido.</strong> <ConCifras texto={reintento.sigueDetenido} />
+          </span>
+        </p>
+      )}
+      {reintento.error && (
+        <p className="ev-aviso ev-aviso--error" role="alert">
+          <Icono tipo="alto" />
+          <span>No pude reintentarlo: {reintento.error}</span>
         </p>
       )}
     </div>
@@ -427,14 +491,14 @@ function Partidas({ evento, c, lectura, ahora }: { evento: Evento; c: Cuentas; l
       ? 'Esto intenté pagar'
       : c.vista === 'borrador'
         ? 'Las partidas'
-        : c.vista === 'aprobacion'
-          ? 'Esto preparé'
+        : c.porAprobarEvento
+          ? 'Esto voy a pagar'
           : 'Esto pagué';
   const bajada =
     n === 0
       ? 'Todavía no armo las partidas de este evento.'
       : c.vista === 'aprobacion'
-        ? `${cuantasPartidas(n)}. Cada cargo se cobra solo cuando lo apruebas en Reap; aquí se actualiza solo.`
+        ? `${cuantasPartidas(n)}. Cada cargo se cobra solo cuando lo apruebas en Reap; aquí se actualiza solo. Apruébalos pronto: las cotizaciones vencen en unos 5 minutos.`
         : c.vista === 'alto' && c.cobrado === 0
         ? 'Ninguna partida se cobró. Estas son las opciones más baratas que encontré.'
         : n === 1 ? 'Una sola partida.' : `${n} partidas, agrupadas por lo que les pasó.`;
@@ -560,11 +624,15 @@ function Informe({
   sinConexion,
   sondeo,
   alEjecutar,
+  reintento,
+  alReintentar,
 }: {
   evento: Evento;
   sinConexion: boolean;
   sondeo: Sondeo;
   alEjecutar: (resuelto: Evento) => void;
+  reintento: Reintento;
+  alReintentar: () => void;
 }) {
   const c = useMemo(() => cuentas(evento), [evento]);
   const lectura = useMemo(() => leerTimeline(evento.timeline, evento.partidas), [evento]);
@@ -574,6 +642,7 @@ function Informe({
       <div className="ev-principal">
         <Encabezado evento={evento} c={c} sondeo={sinConexion ? null : sondeo} />
         {c.vista === 'borrador' && <Ejecutar key={evento.id} evento={evento} sinConexion={sinConexion} alResolver={alEjecutar} />}
+        <Reintentar evento={evento} reintento={reintento} alReintentar={alReintentar} />
         <Medida evento={evento} c={c} />
         {c.vista === 'alto' && <Pido evento={evento} c={c} />}
         <Partidas evento={evento} c={c} lectura={lectura} ahora={sondeo.ahora} />
@@ -620,42 +689,34 @@ export function PantallaEvento({ id }: { id: string }) {
     };
   }, [id]);
 
-  // Sondeo: solo mientras el evento leído del backend está `por_aprobar`. Cada consulta se programa
-  // al terminar la anterior (nunca hay dos encimadas) y el efecto se limpia al cambiar de estado,
-  // de evento o al salir de la pantalla. Un fallo no borra lo que ya se ve: se avisa y se reintenta.
-  const esperaAprobacion = lectura?.origen === 'api' && lectura.datos?.estado === 'por_aprobar';
+  // Sondeo (el de main): mientras el evento espera aprobación se vuelve a pedir cada 3 s, sin pasar
+  // por «Cargando». Un fallo suelto no tira la pantalla: el siguiente intento lo corrige. Encima solo
+  // se anota la hora de cada intento, para decir cuándo fue la última revisión y si una aprobación venció.
+  const porAprobar = lectura?.origen === 'api' && lectura.datos?.estado === 'por_aprobar';
   useEffect(() => {
-    if (!esperaAprobacion) return;
+    if (!porAprobar) return;
     let vigente = true;
-    let reloj: number | undefined;
-
-    const revisar = async () => {
-      const inicio = Date.now();
-      let nueva: Lectura<Evento | null> | null = null;
-      try {
-        nueva = await obtenerEvento(id);
-      } catch {
-        // Error del backend (500, etc.): se trata igual que una revisión fallida.
-      }
-      if (!vigente) return;
+    const fallo = () => {
       const ahora = Date.now();
-      // Sin conexión `obtenerEvento` cae a los datos de ejemplo: aquí eso cuenta como fallo, no como dato.
-      const evento = nueva?.origen === 'api' ? nueva.datos : null;
-      if (evento) {
-        setLectura({ datos: evento, origen: 'api' });
-        setSondeo({ ultima: ahora, fallo: null, ahora });
-      } else {
-        setSondeo((s) => ({ ...s, fallo: ahora, ahora }));
-      }
-      reloj = window.setTimeout(revisar, Math.max(0, SONDEO_MS - (ahora - inicio)));
+      if (vigente) setSondeo((s) => ({ ...s, fallo: ahora, ahora }));
     };
-
-    reloj = window.setTimeout(revisar, SONDEO_MS);
+    const t = setInterval(() => {
+      obtenerEvento(id)
+        .then((l) => {
+          if (!vigente) return;
+          // Sin conexión `obtenerEvento` cae a los datos de ejemplo: eso cuenta como fallo, no como dato.
+          if (l.origen !== 'api' || !l.datos) return fallo();
+          const ahora = Date.now();
+          setLectura(l);
+          setSondeo({ ultima: ahora, fallo: null, ahora });
+        })
+        .catch(fallo);
+    }, SONDEO_MS);
     return () => {
       vigente = false;
-      window.clearTimeout(reloj);
+      clearInterval(t);
     };
-  }, [id, esperaAprobacion]);
+  }, [id, porAprobar]);
 
   const alEjecutar = (resuelto: Evento) => {
     // Si mientras ejecutaba se abrió otro evento, la respuesta ya no es de esta pantalla.
@@ -663,6 +724,35 @@ export function PantallaEvento({ id }: { id: string }) {
     setLectura({ datos: resuelto, origen: 'api' });
     setSondeo({ ultima: Date.now(), fallo: null, ahora: Date.now() });
   };
+
+  // Reintento (el de main): POST /reintentar y se pinta el evento que devuelve; un 400/409 se muestra tal cual.
+  const [reintento, setReintento] = useState<Reintento>(SIN_REINTENTO);
+  // Candado contra el doble envío: el estado tarda un render en deshabilitar el botón.
+  const reintentando = useRef(false);
+  useEffect(() => setReintento(SIN_REINTENTO), [id]);
+
+  function reintentar() {
+    if (reintentando.current) return;
+    reintentando.current = true;
+    const deEste = () => idVigente.current === id;
+    setReintento({ enCurso: true, error: null, sigueDetenido: null });
+    reintentarEvento(id)
+      .then((e) => {
+        if (!deEste()) return;
+        setLectura({ datos: e, origen: 'api' });
+        setSondeo({ ultima: Date.now(), fallo: null, ahora: Date.now() });
+        // El backend responde 200 aunque no haya creado cargos (rebasa el techo, no pudo recotizar):
+        // la razón queda en el último paso de las reglas.
+        const razon = e.estado === 'revision_humana' ? e.timeline.filter((p) => p.actor === 'reglas').at(-1)?.mensaje : undefined;
+        setReintento({ enCurso: false, error: null, sigueDetenido: razon ? `${mensajeLegible(razon)}.` : null });
+      })
+      .catch((e) => {
+        if (deEste()) setReintento({ enCurso: false, error: mensajeDeError(e), sigueDetenido: null });
+      })
+      .finally(() => {
+        reintentando.current = false;
+      });
+  }
 
   if (error) {
     return (
@@ -708,7 +798,14 @@ export function PantallaEvento({ id }: { id: string }) {
     <article className="ev-raiz">
       <Regreso />
       {sinConexion && <AvisoSinConexion />}
-      <Informe evento={evento} sinConexion={sinConexion} sondeo={sondeo} alEjecutar={alEjecutar} />
+      <Informe
+        evento={evento}
+        sinConexion={sinConexion}
+        sondeo={sondeo}
+        alEjecutar={alEjecutar}
+        reintento={reintento}
+        alReintentar={reintentar}
+      />
     </article>
   );
 }

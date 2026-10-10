@@ -900,6 +900,18 @@
   color: var(--tinta-2);
   max-width: 56ch;
 }
+/* reintento: las reglas volvieron a frenar. Índigo punteado: no es un error ni un alto nuevo */
+.ev-aviso--reglas {
+  color: var(--tinta);
+  border: 2px dashed var(--marca);
+  background: var(--marca-suave);
+}
+.ev-aviso--reglas strong {
+  color: var(--marca);
+}
+.ev-accion .ev-aviso {
+  overflow-wrap: anywhere;
+}
 
 /* las que esperan a la persona: el grupo entero lleva contorno índigo */
 .ev-grupo--por_aprobar > ul {

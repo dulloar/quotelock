@@ -122,6 +122,8 @@ svg.ic {
 
 .barra {
   display: flex;
+  /* a 320 px la marca y la navegación no caben en un renglón: la navegación baja en vez de cortarse */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--esp-2);
