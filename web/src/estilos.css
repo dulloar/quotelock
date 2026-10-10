@@ -122,6 +122,8 @@ svg.ic {
 
 .barra {
   display: flex;
+  /* a 320 px la marca y la navegación no caben en un renglón: la navegación baja en vez de cortarse */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--esp-2);
@@ -271,12 +273,6 @@ svg.ic {
   color: var(--margen-tinta);
 }
 
-.estado[data-estado='por_aprobar'] {
-  background: var(--margen-suave);
-  color: var(--margen-tinta);
-}
-
-.estado[data-estado='por_aprobar'] svg.ic,
 .estado[data-estado='ajustado'] svg.ic {
   color: var(--margen);
 }
@@ -284,6 +280,13 @@ svg.ic {
 .estado[data-estado='revision_humana'] {
   background: var(--alto);
   color: var(--sobre-alto);
+}
+
+/* espera a una persona: índigo de marca, contorno punteado; no es alto ni error */
+.estado[data-estado='por_aprobar'] {
+  background: var(--marca-suave);
+  color: var(--marca);
+  box-shadow: inset 0 0 0 1.5px var(--marca);
 }
 
 .estado[data-estado='borrador'] {
@@ -351,6 +354,10 @@ svg.ic {
 
 .lista__pendiente svg.ic {
   color: var(--alto);
+}
+
+.lista__pendiente--aprobar svg.ic {
+  color: var(--marca);
 }
 
 .lista-eventos {

@@ -20,6 +20,8 @@ export interface Brief {
   asistentes: number;
   presupuestoMXN: number;
   margen: Margen;
+  /** Texto libre: el backend lo guarda y nunca influye en reglas ni montos. */
+  notas?: string;
 }
 
 export interface Partida {

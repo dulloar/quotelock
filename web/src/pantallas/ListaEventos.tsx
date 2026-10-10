@@ -5,13 +5,13 @@ import { ETIQUETA_ESTADO_EVENTO, fechaLarga, mxn, porcentaje } from '../formato'
 import type { EstadoEvento, Evento } from '../tipos';
 import { AvisoSinConexion } from './AvisoSinConexion';
 
-// Cada estado lleva su forma además del color: círculo, triángulo, octágono y círculo punteado.
+// Cada estado lleva su forma además del color: círculo, triángulo, octágono, círculo punteado y reloj de arena.
 const ICONO_ESTADO: Record<EstadoEvento, string> = {
   pagado: '#i-cabe',
   ajustado: '#i-margen',
   revision_humana: '#i-alto-inv',
   borrador: '#i-borrador',
-  por_aprobar: '#i-margen',
+  por_aprobar: '#i-espera',
 };
 
 export function ListaEventos() {
@@ -30,6 +30,7 @@ export function ListaEventos() {
 
   const eventos = lectura?.datos;
   const enRevision = eventos?.filter((e) => e.estado === 'revision_humana').length ?? 0;
+  const porAprobar = eventos?.filter((e) => e.estado === 'por_aprobar').length ?? 0;
 
   return (
     <section className="lista" aria-labelledby="lista-titulo">
@@ -83,6 +84,18 @@ export function ListaEventos() {
               </span>
             </p>
           )}
+          {porAprobar > 0 && (
+            <p className="lista__pendiente lista__pendiente--aprobar">
+              <svg className="ic" aria-hidden="true">
+                <use href="#i-espera" />
+              </svg>
+              <span>
+                {porAprobar === 1
+                  ? 'Tengo cargos listos en 1 evento: falta tu aprobación.'
+                  : `Tengo cargos listos en ${porAprobar} eventos: falta tu aprobación.`}
+              </span>
+            </p>
+          )}
           <ul className="lista-eventos">
             {eventos.map((e) => (
               <li key={e.id}>
@@ -97,9 +110,9 @@ export function ListaEventos() {
                   </span>
                   <span className="estado" data-estado={e.estado}>
                     <svg className="ic" aria-hidden="true">
-                      <use href={ICONO_ESTADO[e.estado]} />
+                      <use href={ICONO_ESTADO[e.estado] ?? '#i-borrador'} />
                     </svg>
-                    {ETIQUETA_ESTADO_EVENTO[e.estado]}
+                    {ETIQUETA_ESTADO_EVENTO[e.estado] ?? e.estado}
                   </span>
                   <svg className="ic fila-evento__ir" aria-hidden="true">
                     <use href="#i-ir" />
